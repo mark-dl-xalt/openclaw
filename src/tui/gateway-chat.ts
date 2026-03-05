@@ -15,6 +15,8 @@ import {
   type SessionsPatchResult,
   type SessionsPatchParams,
 } from "../gateway/protocol/index.js";
+import { secretRefKey } from "../secrets/ref-contract.js";
+import { resolveSecretRefValues } from "../secrets/resolve.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
 import { VERSION } from "../version.js";
 import type { ResponseUsageMode, SessionInfo, SessionScope } from "./tui-types.js";
@@ -39,6 +41,64 @@ export type GatewayEvent = {
   payload?: unknown;
   seq?: number;
 };
+
+type ResolvedGatewayConnection = {
+  url: string;
+  token?: string;
+  password?: string;
+};
+
+function trimToUndefined(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+async function resolveConfiguredSecretInputString(params: {
+  value: unknown;
+  path: string;
+  env: NodeJS.ProcessEnv;
+  config: ReturnType<typeof loadConfig>;
+}): Promise<{ value?: string; unresolvedRefReason?: string }> {
+  const { ref } = resolveSecretInputRef({
+    value: params.value,
+    defaults: params.config.secrets?.defaults,
+  });
+  if (!ref) {
+    return { value: trimToUndefined(params.value) };
+  }
+
+  const refLabel = `${ref.source}:${ref.provider}:${ref.id}`;
+  try {
+    const resolved = await resolveSecretRefValues([ref], {
+      config: params.config,
+      env: params.env,
+    });
+    const resolvedValue = trimToUndefined(resolved.get(secretRefKey(ref)));
+    if (!resolvedValue) {
+      return {
+        unresolvedRefReason: `${params.path} SecretRef is unresolved (${refLabel}).`,
+      };
+    }
+    return { value: resolvedValue };
+  } catch {
+    return {
+      unresolvedRefReason: `${params.path} SecretRef is unresolved (${refLabel}).`,
+    };
+  }
+}
+
+function throwGatewayAuthResolutionError(reason: string): never {
+  throw new Error(
+    [
+      reason,
+      "Fix: set OPENCLAW_GATEWAY_TOKEN/OPENCLAW_GATEWAY_PASSWORD, pass --token/--password,",
+      "or resolve the configured secret provider for this credential.",
+    ].join("\n"),
+  );
+}
 
 export type GatewaySessionList = {
   ts: number;
@@ -113,18 +173,17 @@ export class GatewayChatClient {
   onDisconnected?: (reason: string) => void;
   onGap?: (info: { expected: number; received: number }) => void;
 
-  constructor(opts: GatewayConnectionOptions) {
-    const resolved = resolveGatewayConnection(opts);
-    this.connection = resolved;
+  constructor(connection: ResolvedGatewayConnection) {
+    this.connection = connection;
 
     this.readyPromise = new Promise((resolve) => {
       this.resolveReady = resolve;
     });
 
     this.client = new GatewayClient({
-      url: resolved.url,
-      token: resolved.token,
-      password: resolved.password,
+      url: connection.url,
+      token: connection.token,
+      password: connection.password,
       clientName: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
       clientDisplayName: "openclaw-tui",
       clientVersion: VERSION,
@@ -157,6 +216,11 @@ export class GatewayChatClient {
         this.onGap?.(info);
       },
     });
+  }
+
+  static async connect(opts: GatewayConnectionOptions): Promise<GatewayChatClient> {
+    const connection = await resolveGatewayConnection(opts);
+    return new GatewayChatClient(connection);
   }
 
   start() {
@@ -235,37 +299,16 @@ export class GatewayChatClient {
   }
 }
 
-export function resolveGatewayConnection(opts: GatewayConnectionOptions) {
+export async function resolveGatewayConnection(
+  opts: GatewayConnectionOptions,
+): Promise<ResolvedGatewayConnection> {
   const config = loadConfig();
+  const env = process.env;
+  const gatewayAuthMode = config.gateway?.auth?.mode;
   const isRemoteMode = config.gateway?.mode === "remote";
-  const remote = isRemoteMode ? config.gateway?.remote : undefined;
-  const defaults = config.secrets?.defaults;
-
-  const resolveConfigSecretInputString = (value: unknown): string | undefined => {
-    const { ref } = resolveSecretInputRef({
-      value,
-      defaults,
-    });
-    if (ref) {
-      if (ref.source !== "env") {
-        return undefined;
-      }
-      const refValue = process.env[ref.id];
-      if (typeof refValue !== "string") {
-        return undefined;
-      }
-      const trimmedRef = refValue.trim();
-      return trimmedRef.length > 0 ? trimmedRef : undefined;
-    }
-    if (typeof value !== "string") {
-      return undefined;
-    }
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  };
-  const authToken = resolveConfigSecretInputString(config.gateway?.auth?.token);
-  const remoteToken = resolveConfigSecretInputString(remote?.token);
-  const remotePassword = resolveConfigSecretInputString(remote?.password);
+  const remote = config.gateway?.remote;
+  const envToken = trimToUndefined(env.OPENCLAW_GATEWAY_TOKEN);
+  const envPassword = trimToUndefined(env.OPENCLAW_GATEWAY_PASSWORD);
 
   const urlOverride =
     typeof opts.url === "string" && opts.url.trim().length > 0 ? opts.url.trim() : undefined;
@@ -281,17 +324,94 @@ export function resolveGatewayConnection(opts: GatewayConnectionOptions) {
     ...(urlOverride ? { url: urlOverride } : {}),
   }).url;
 
-  const token =
-    explicitAuth.token ||
-    (!urlOverride
-      ? isRemoteMode
-        ? remoteToken
-        : process.env.OPENCLAW_GATEWAY_TOKEN?.trim() || authToken
-      : undefined);
+  if (urlOverride) {
+    return {
+      url,
+      token: explicitAuth.token,
+      password: explicitAuth.password,
+    };
+  }
 
-  const password =
-    explicitAuth.password ||
-    (!urlOverride ? process.env.OPENCLAW_GATEWAY_PASSWORD?.trim() || remotePassword : undefined);
+  if (isRemoteMode) {
+    const remoteToken = explicitAuth.token
+      ? { value: explicitAuth.token }
+      : await resolveConfiguredSecretInputString({
+          value: remote?.token,
+          path: "gateway.remote.token",
+          env,
+          config,
+        });
+    const remotePassword =
+      explicitAuth.password || envPassword
+        ? { value: explicitAuth.password ?? envPassword }
+        : await resolveConfiguredSecretInputString({
+            value: remote?.password,
+            path: "gateway.remote.password",
+            env,
+            config,
+          });
 
-  return { url, token, password };
+    const token = explicitAuth.token ?? remoteToken.value;
+    const password = explicitAuth.password ?? envPassword ?? remotePassword.value;
+    if (!token && !password) {
+      throwGatewayAuthResolutionError(
+        remoteToken.unresolvedRefReason ??
+          remotePassword.unresolvedRefReason ??
+          "Missing gateway auth credentials.",
+      );
+    }
+    return { url, token, password };
+  }
+
+  if (gatewayAuthMode === "password") {
+    const localPassword =
+      explicitAuth.password || envPassword
+        ? { value: explicitAuth.password ?? envPassword }
+        : await resolveConfiguredSecretInputString({
+            value: config.gateway?.auth?.password,
+            path: "gateway.auth.password",
+            env,
+            config,
+          });
+    const password = explicitAuth.password ?? envPassword ?? localPassword.value;
+    if (!password) {
+      throwGatewayAuthResolutionError(
+        localPassword.unresolvedRefReason ?? "Missing gateway auth password.",
+      );
+    }
+    return {
+      url,
+      token: explicitAuth.token ?? envToken,
+      password,
+    };
+  }
+
+  if (gatewayAuthMode !== "none" && gatewayAuthMode !== "trusted-proxy") {
+    const localToken =
+      explicitAuth.token || envToken
+        ? { value: explicitAuth.token ?? envToken }
+        : await resolveConfiguredSecretInputString({
+            value: config.gateway?.auth?.token,
+            path: "gateway.auth.token",
+            env,
+            config,
+          });
+    const token = explicitAuth.token ?? envToken ?? localToken.value;
+    if (!token) {
+      throwGatewayAuthResolutionError(
+        localToken.unresolvedRefReason ?? "Missing gateway auth token.",
+      );
+    }
+    return {
+      url,
+      token,
+      password: explicitAuth.password ?? envPassword,
+    };
+  }
+
+  return {
+    url,
+    token: explicitAuth.token ?? envToken,
+    password: explicitAuth.password ?? envPassword,
+  };
 }

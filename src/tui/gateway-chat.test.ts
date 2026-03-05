@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   loadConfigMock as loadConfig,
@@ -5,7 +8,7 @@ import {
   pickPrimaryTailnetIPv4Mock as pickPrimaryTailnetIPv4,
   resolveGatewayPortMock as resolveGatewayPort,
 } from "../gateway/gateway-connection.test-mocks.js";
-import { captureEnv, withEnv } from "../test-utils/env.js";
+import { captureEnv, withEnvAsync } from "../test-utils/env.js";
 
 const { resolveGatewayConnection } = await import("./gateway-chat.js");
 
@@ -29,10 +32,10 @@ describe("resolveGatewayConnection", () => {
     envSnapshot.restore();
   });
 
-  it("throws when url override is missing explicit credentials", () => {
+  it("throws when url override is missing explicit credentials", async () => {
     loadConfig.mockReturnValue({ gateway: { mode: "local" } });
 
-    expect(() => resolveGatewayConnection({ url: "wss://override.example/ws" })).toThrow(
+    await expect(resolveGatewayConnection({ url: "wss://override.example/ws" })).rejects.toThrow(
       "explicit credentials",
     );
   });
@@ -48,10 +51,10 @@ describe("resolveGatewayConnection", () => {
       auth: { password: "explicit-password" },
       expected: { token: undefined, password: "explicit-password" },
     },
-  ])("uses explicit $label when url override is set", ({ auth, expected }) => {
+  ])("uses explicit $label when url override is set", async ({ auth, expected }) => {
     loadConfig.mockReturnValue({ gateway: { mode: "local" } });
 
-    const result = resolveGatewayConnection({
+    const result = await resolveGatewayConnection({
       url: "wss://override.example/ws",
       ...auth,
     });
@@ -73,33 +76,35 @@ describe("resolveGatewayConnection", () => {
       bind: "lan",
       setup: () => pickPrimaryLanIPv4.mockReturnValue("192.168.1.42"),
     },
-  ])("uses loopback host when local bind is $label", ({ bind, setup }) => {
+  ])("uses loopback host when local bind is $label", async ({ bind, setup }) => {
     loadConfig.mockReturnValue({ gateway: { mode: "local", bind } });
     resolveGatewayPort.mockReturnValue(18800);
     setup();
 
-    const result = resolveGatewayConnection({});
+    const result = await withEnvAsync({ OPENCLAW_GATEWAY_TOKEN: "env-token" }, async () => {
+      return await resolveGatewayConnection({});
+    });
 
     expect(result.url).toBe("ws://127.0.0.1:18800");
   });
 
-  it("uses OPENCLAW_GATEWAY_TOKEN for local mode", () => {
+  it("uses OPENCLAW_GATEWAY_TOKEN for local mode", async () => {
     loadConfig.mockReturnValue({ gateway: { mode: "local" } });
 
-    withEnv({ OPENCLAW_GATEWAY_TOKEN: "env-token" }, () => {
-      const result = resolveGatewayConnection({});
+    await withEnvAsync({ OPENCLAW_GATEWAY_TOKEN: "env-token" }, async () => {
+      const result = await resolveGatewayConnection({});
       expect(result.token).toBe("env-token");
     });
   });
 
-  it("falls back to config auth token when env token is missing", () => {
+  it("falls back to config auth token when env token is missing", async () => {
     loadConfig.mockReturnValue({ gateway: { mode: "local", auth: { token: "config-token" } } });
 
-    const result = resolveGatewayConnection({});
+    const result = await resolveGatewayConnection({});
     expect(result.token).toBe("config-token");
   });
 
-  it("resolves env-template config auth token from referenced env var", () => {
+  it("resolves env-template config auth token from referenced env var", async () => {
     loadConfig.mockReturnValue({
       secrets: {
         providers: {
@@ -112,13 +117,13 @@ describe("resolveGatewayConnection", () => {
       },
     });
 
-    withEnv({ CUSTOM_GATEWAY_TOKEN: "custom-token" }, () => {
-      const result = resolveGatewayConnection({});
+    await withEnvAsync({ CUSTOM_GATEWAY_TOKEN: "custom-token" }, async () => {
+      const result = await resolveGatewayConnection({});
       expect(result.token).toBe("custom-token");
     });
   });
 
-  it("does not treat unresolved env-template config auth token as plaintext", () => {
+  it("fails with guidance when env-template config auth token is unresolved", async () => {
     loadConfig.mockReturnValue({
       gateway: {
         mode: "local",
@@ -126,11 +131,12 @@ describe("resolveGatewayConnection", () => {
       },
     });
 
-    const result = resolveGatewayConnection({});
-    expect(result.token).toBeUndefined();
+    await expect(resolveGatewayConnection({})).rejects.toThrow(
+      "gateway.auth.token SecretRef is unresolved",
+    );
   });
 
-  it("prefers OPENCLAW_GATEWAY_PASSWORD over remote password fallback", () => {
+  it("prefers OPENCLAW_GATEWAY_PASSWORD over remote password fallback", async () => {
     loadConfig.mockReturnValue({
       gateway: {
         mode: "remote",
@@ -138,9 +144,71 @@ describe("resolveGatewayConnection", () => {
       },
     });
 
-    withEnv({ OPENCLAW_GATEWAY_PASSWORD: "env-pass" }, () => {
-      const result = resolveGatewayConnection({});
+    await withEnvAsync({ OPENCLAW_GATEWAY_PASSWORD: "env-pass" }, async () => {
+      const result = await resolveGatewayConnection({});
       expect(result.password).toBe("env-pass");
     });
+  });
+
+  it("resolves file-backed SecretRef token for local mode", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-tui-file-secret-"));
+    const secretFile = path.join(tempDir, "secrets.json");
+    await fs.writeFile(secretFile, JSON.stringify({ gatewayToken: "file-secret-token" }), "utf8");
+    await fs.chmod(secretFile, 0o600);
+
+    loadConfig.mockReturnValue({
+      secrets: {
+        providers: {
+          fileProvider: {
+            source: "file",
+            path: secretFile,
+            mode: "json",
+          },
+        },
+      },
+      gateway: {
+        mode: "local",
+        auth: {
+          token: { source: "file", provider: "fileProvider", id: "/gatewayToken" },
+        },
+      },
+    });
+
+    try {
+      const result = await resolveGatewayConnection({});
+      expect(result.token).toBe("file-secret-token");
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves exec-backed SecretRef token for local mode", async () => {
+    const execProgram = [
+      "process.stdout.write(",
+      "JSON.stringify({ protocolVersion: 1, values: { EXEC_GATEWAY_TOKEN: 'exec-secret-token' } })",
+      ");",
+    ].join("");
+
+    loadConfig.mockReturnValue({
+      secrets: {
+        providers: {
+          execProvider: {
+            source: "exec",
+            command: process.execPath,
+            args: ["-e", execProgram],
+            allowInsecurePath: true,
+          },
+        },
+      },
+      gateway: {
+        mode: "local",
+        auth: {
+          token: { source: "exec", provider: "execProvider", id: "EXEC_GATEWAY_TOKEN" },
+        },
+      },
+    });
+
+    const result = await resolveGatewayConnection({});
+    expect(result.token).toBe("exec-secret-token");
   });
 });
