@@ -1,5 +1,12 @@
 import { normalizeProviderId } from "./model-selection.js";
 
+// ---------------------------------------------------------------------------
+// Rovo Dev service-account env var names (T013)
+// ---------------------------------------------------------------------------
+export const ROVODEV_EMAIL_KEY = "OPENCLAW_LIVE_ROVODEV_EMAIL";
+export const ROVODEV_TOKEN_KEY = "OPENCLAW_LIVE_ROVODEV_TOKEN";
+export const ROVODEV_SITE_KEY = "OPENCLAW_LIVE_ROVODEV_SITE";
+
 const KEY_SPLIT_RE = /[\s,;]+/g;
 const GOOGLE_LIVE_SINGLE_KEY = "OPENCLAW_LIVE_GEMINI_KEY";
 

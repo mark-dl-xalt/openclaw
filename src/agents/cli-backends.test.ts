@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
-import { resolveCliBackendConfig } from "./cli-backends.js";
+import { resolveCliBackendConfig, resolveCliBackendIds } from "./cli-backends.js";
 
 describe("resolveCliBackendConfig reliability merge", () => {
   it("defaults codex-cli to workspace-write for fresh and resume runs", () => {
@@ -164,5 +164,106 @@ describe("resolveCliBackendConfig claude-cli defaults", () => {
     ]);
     expect(resolved?.config.args).not.toContain("bypassPermissions");
     expect(resolved?.config.resumeArgs).not.toContain("bypassPermissions");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T021: Regression – existing backends still resolve after rovodev is added
+// ---------------------------------------------------------------------------
+describe("resolveCliBackendConfig regression after rovodev addition (T021)", () => {
+  it("claude-cli resolves to command 'claude' with no config override", () => {
+    const resolved = resolveCliBackendConfig("claude-cli", undefined);
+
+    expect(resolved).not.toBeNull();
+    expect(resolved!.id).toBe("claude-cli");
+    expect(resolved!.config.command).toBe("claude");
+  });
+
+  it("claude-cli args include -p and --output-format json", () => {
+    const resolved = resolveCliBackendConfig("claude-cli", undefined);
+
+    expect(resolved).not.toBeNull();
+    expect(resolved!.config.args).toEqual(
+      expect.arrayContaining(["-p", "--output-format", "json"]),
+    );
+  });
+
+  it("codex-cli resolves to command 'codex' with no config override", () => {
+    const resolved = resolveCliBackendConfig("codex-cli", undefined);
+
+    expect(resolved).not.toBeNull();
+    expect(resolved!.id).toBe("codex-cli");
+    expect(resolved!.config.command).toBe("codex");
+  });
+
+  it("codex-cli args include 'exec' and '--json'", () => {
+    const resolved = resolveCliBackendConfig("codex-cli", undefined);
+
+    expect(resolved).not.toBeNull();
+    expect(resolved!.config.args).toEqual(expect.arrayContaining(["exec", "--json"]));
+  });
+
+  it("resolveCliBackendIds includes both claude-cli and codex-cli", () => {
+    const ids = resolveCliBackendIds(undefined);
+
+    expect(ids.has("claude-cli")).toBe(true);
+    expect(ids.has("codex-cli")).toBe(true);
+  });
+
+  it("claude-cli config override is deep-merged and does not lose defaults", () => {
+    const cfg = {
+      agents: {
+        defaults: {
+          cliBackends: {
+            "claude-cli": {
+              command: "claude",
+              reliability: {
+                watchdog: {
+                  resume: {
+                    noOutputTimeoutMs: 90_000,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    } satisfies OpenClawConfig;
+
+    const resolved = resolveCliBackendConfig("claude-cli", cfg);
+
+    expect(resolved).not.toBeNull();
+    expect(resolved!.config.command).toBe("claude");
+    expect(resolved!.config.reliability?.watchdog?.resume?.noOutputTimeoutMs).toBe(90_000);
+    // Default fresh watchdog ratio must still be present
+    expect(resolved!.config.reliability?.watchdog?.fresh?.noOutputTimeoutRatio).toBe(0.8);
+  });
+
+  it("unknown backend without config override returns null", () => {
+    const resolved = resolveCliBackendConfig("some-unknown-backend", undefined);
+
+    expect(resolved).toBeNull();
+  });
+
+  it("rovodev backend is resolvable when registered in cliBackends config", () => {
+    const cfg = {
+      agents: {
+        defaults: {
+          cliBackends: {
+            "rovo-dev": {
+              command: "acli",
+              args: ["rovodev", "run", "--yolo"],
+              output: "text",
+              input: "arg",
+            },
+          },
+        },
+      },
+    } satisfies OpenClawConfig;
+
+    const resolved = resolveCliBackendConfig("rovo-dev", cfg);
+
+    expect(resolved).not.toBeNull();
+    expect(resolved!.config.command).toBe("acli");
   });
 });

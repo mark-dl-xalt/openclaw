@@ -5,6 +5,7 @@ import {
   CLI_RESUME_WATCHDOG_DEFAULTS,
 } from "./cli-watchdog-defaults.js";
 import { normalizeProviderId } from "./model-selection.js";
+import { ROVODEV_BACKEND } from "./rovo-dev-backends.js";
 
 export type ResolvedCliBackend = {
   id: string;
@@ -206,6 +207,7 @@ export function resolveCliBackendIds(cfg?: OpenClawConfig): Set<string> {
   const ids = new Set<string>([
     normalizeBackendKey("claude-cli"),
     normalizeBackendKey("codex-cli"),
+    normalizeBackendKey("rovo-dev"),
   ]);
   const configured = cfg?.agents?.defaults?.cliBackends ?? {};
   for (const key of Object.keys(configured)) {
@@ -233,6 +235,17 @@ export function resolveCliBackendConfig(
   }
   if (normalized === "codex-cli") {
     const merged = mergeBackendConfig(DEFAULT_CODEX_BACKEND, override);
+    const command = merged.command?.trim();
+    if (!command) {
+      return null;
+    }
+    return { id: normalized, config: { ...merged, command } };
+  }
+
+  if (normalized === "rovo-dev") {
+    // Use the static ROVODEV_BACKEND as the base, allowing config overrides.
+    const base: CliBackendConfig = { ...ROVODEV_BACKEND };
+    const merged = mergeBackendConfig(base, override);
     const command = merged.command?.trim();
     if (!command) {
       return null;
