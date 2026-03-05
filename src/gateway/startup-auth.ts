@@ -91,6 +91,25 @@ function shouldPersistGeneratedToken(params: {
   return true;
 }
 
+function assertExplicitGatewayAuthModeWhenBothConfigured(cfg: OpenClawConfig): void {
+  const auth = cfg.gateway?.auth;
+  if (!auth) {
+    return;
+  }
+  if (typeof auth.mode === "string" && auth.mode.trim().length > 0) {
+    return;
+  }
+  const defaults = cfg.secrets?.defaults;
+  const tokenConfigured = hasConfiguredSecretInput(auth.token, defaults);
+  const passwordConfigured = hasConfiguredSecretInput(auth.password, defaults);
+  if (!tokenConfigured || !passwordConfigured) {
+    return;
+  }
+  throw new Error(
+    "Invalid config: gateway.auth.token and gateway.auth.password are both configured, but gateway.auth.mode is unset. Set gateway.auth.mode to token or password.",
+  );
+}
+
 function hasGatewayTokenCandidate(params: {
   cfg: OpenClawConfig;
   env: NodeJS.ProcessEnv;
@@ -275,6 +294,7 @@ export async function ensureGatewayStartupAuth(params: {
   generatedToken?: string;
   persistedGeneratedToken: boolean;
 }> {
+  assertExplicitGatewayAuthModeWhenBothConfigured(params.cfg);
   const env = params.env ?? process.env;
   const persistRequested = params.persist === true;
   const cfgWithResolvedToken = await resolveGatewayTokenSecretRef(

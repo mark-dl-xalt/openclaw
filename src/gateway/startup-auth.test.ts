@@ -183,6 +183,24 @@ describe("ensureGatewayStartupAuth", () => {
     expect(mocks.writeConfigFile).not.toHaveBeenCalled();
   });
 
+  it("requires explicit gateway.auth.mode when token and password are both configured", async () => {
+    await expect(
+      ensureGatewayStartupAuth({
+        cfg: {
+          gateway: {
+            auth: {
+              token: "configured-token",
+              password: "configured-password",
+            },
+          },
+        },
+        env: {} as NodeJS.ProcessEnv,
+        persist: true,
+      }),
+    ).rejects.toThrow(/gateway\.auth\.mode is unset/i);
+    expect(mocks.writeConfigFile).not.toHaveBeenCalled();
+  });
+
   it("uses OPENCLAW_GATEWAY_PASSWORD without resolving configured password SecretRef", async () => {
     const result = await ensureGatewayStartupAuth({
       cfg: {
