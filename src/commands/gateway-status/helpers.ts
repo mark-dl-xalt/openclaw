@@ -1,8 +1,10 @@
 import { resolveGatewayPort } from "../../config/config.js";
 import type { OpenClawConfig, ConfigFileSnapshot } from "../../config/types.js";
-import { hasConfiguredSecretInput } from "../../config/types.secrets.js";
+import { hasConfiguredSecretInput, resolveSecretInputRef } from "../../config/types.secrets.js";
 import type { GatewayProbeResult } from "../../gateway/probe.js";
 import { pickPrimaryTailnetIPv4 } from "../../infra/tailnet.js";
+import { secretRefKey } from "../../secrets/ref-contract.js";
+import { resolveSecretRefValues } from "../../secrets/resolve.js";
 import { colorize, theme } from "../../terminal/theme.js";
 import { pickGatewaySelfPresence } from "../gateway-presence.js";
 
@@ -145,11 +147,42 @@ export function sanitizeSshTarget(value: unknown): string | null {
   return trimmed.replace(/^ssh\\s+/, "");
 }
 
-export function resolveAuthForTarget(
+async function resolveConfiguredSecretInputValue(
+  cfg: OpenClawConfig,
+  value: unknown,
+): Promise<string | undefined> {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  const { ref } = resolveSecretInputRef({
+    value,
+    defaults: cfg.secrets?.defaults,
+  });
+  if (!ref) {
+    return undefined;
+  }
+  try {
+    const resolved = await resolveSecretRefValues([ref], {
+      config: cfg,
+      env: process.env,
+    });
+    const resolvedValue = resolved.get(secretRefKey(ref));
+    if (typeof resolvedValue !== "string") {
+      return undefined;
+    }
+    const trimmed = resolvedValue.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function resolveAuthForTarget(
   cfg: OpenClawConfig,
   target: GatewayStatusTarget,
   overrides: { token?: string; password?: string },
-): { token?: string; password?: string } {
+): Promise<{ token?: string; password?: string }> {
   const tokenOverride = overrides.token?.trim() ? overrides.token.trim() : undefined;
   const passwordOverride = overrides.password?.trim() ? overrides.password.trim() : undefined;
   if (tokenOverride || passwordOverride) {
@@ -157,26 +190,25 @@ export function resolveAuthForTarget(
   }
 
   if (target.kind === "configRemote" || target.kind === "sshTunnel") {
-    const token =
-      typeof cfg.gateway?.remote?.token === "string" ? cfg.gateway.remote.token.trim() : "";
-    const remotePassword = (cfg.gateway?.remote as { password?: unknown } | undefined)?.password;
-    const password = typeof remotePassword === "string" ? remotePassword.trim() : "";
+    const token = await resolveConfiguredSecretInputValue(cfg, cfg.gateway?.remote?.token);
+    const password = await resolveConfiguredSecretInputValue(
+      cfg,
+      (cfg.gateway?.remote as { password?: unknown } | undefined)?.password,
+    );
     return {
-      token: token.length > 0 ? token : undefined,
-      password: password.length > 0 ? password : undefined,
+      token,
+      password,
     };
   }
 
   const envToken = process.env.OPENCLAW_GATEWAY_TOKEN?.trim() || "";
   const envPassword = process.env.OPENCLAW_GATEWAY_PASSWORD?.trim() || "";
-  const cfgToken =
-    typeof cfg.gateway?.auth?.token === "string" ? cfg.gateway.auth.token.trim() : "";
-  const cfgPassword =
-    typeof cfg.gateway?.auth?.password === "string" ? cfg.gateway.auth.password.trim() : "";
+  const cfgToken = await resolveConfiguredSecretInputValue(cfg, cfg.gateway?.auth?.token);
+  const cfgPassword = await resolveConfiguredSecretInputValue(cfg, cfg.gateway?.auth?.password);
 
   return {
-    token: envToken || cfgToken || undefined,
-    password: envPassword || cfgPassword || undefined,
+    token: envToken || cfgToken,
+    password: envPassword || cfgPassword,
   };
 }
 
