@@ -31,6 +31,7 @@ import {
   resolvePromptInput,
   resolveSessionIdToSend,
   resolveSystemPromptUsage,
+  stripRovoDevNoise,
   writeCliImages,
 } from "./cli-runner/helpers.js";
 import { resolveOpenClawDocsPath } from "./docs-path.js";
@@ -329,7 +330,12 @@ export async function runCliAgent(params: {
         });
         const result = await managedRun.wait();
 
-        const stdout = result.stdout.trim();
+        // For rovo-dev, strip ANSI codes and acli UI noise as a fallback safety
+        // net. The primary clean-capture path is --output-file in rovo-dev-runner.ts.
+        // Never apply this to Claude or Codex output.
+        const rawStdout = result.stdout.trim();
+        const stdout =
+          backendResolved.id === ROVODEV_BACKEND_ID ? stripRovoDevNoise(rawStdout) : rawStdout;
         const stderr = result.stderr.trim();
         if (logOutputText) {
           if (stdout) {

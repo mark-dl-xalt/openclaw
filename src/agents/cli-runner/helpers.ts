@@ -345,6 +345,49 @@ export async function writeCliImages(
   return { paths, cleanup };
 }
 
+/**
+ * Strip ANSI escape codes and acli UI noise from Rovo Dev stdout.
+ *
+ * This is a fallback safety net for code paths that go through the generic
+ * cli-runner rather than rovo-dev-runner's --output-file approach. Only call
+ * this for the rovo-dev backend — never apply it to Claude or Codex output.
+ */
+export function stripRovoDevNoise(text: string): string {
+  // Remove ANSI CSI sequences (e.g. \x1B[0m), OSC sequences (e.g. \x1B]...\x07),
+  // and bare bracket sequences that some terminals emit without the ESC prefix.
+  const ESC = "\x1B";
+  const BEL = "\x07";
+  const ansiPattern = new RegExp(
+    `${ESC}\\[[0-9;]*[a-zA-Z]|${ESC}\\].*?${BEL}|\\[[?]?[0-9;]*[a-zA-Z]`,
+    "g",
+  );
+  const stripped = text.replace(ansiPattern, "");
+
+  const lines = stripped.split(/\r?\n/);
+  const cleaned = lines.filter((line) => {
+    const trimmed = line.trimStart();
+    // Progress checkmarks emitted by acli (e.g. "✔ Done")
+    if (trimmed.startsWith("✔")) {
+      return false;
+    }
+    // Tool call log lines (e.g. "⬢ Called bash_tool")
+    if (trimmed.startsWith("⬢ Called")) {
+      return false;
+    }
+    // Session context bar (e.g. "Session context: ▮▮▮")
+    if (/^Session context:\s*[▮▯█░]+/.test(trimmed)) {
+      return false;
+    }
+    // Box border lines produced by acli's response formatter
+    if (/^─+\s*Response\s*─+$/.test(trimmed) || /^─{4,}$/.test(trimmed)) {
+      return false;
+    }
+    return true;
+  });
+
+  return cleaned.join("\n").trim();
+}
+
 export function buildCliArgs(params: {
   backend: CliBackendConfig;
   baseArgs: string[];

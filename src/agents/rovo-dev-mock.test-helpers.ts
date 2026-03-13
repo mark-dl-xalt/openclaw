@@ -7,10 +7,12 @@
 import { vi } from "vitest";
 
 export type MockAcliSpawnOptions = {
-  /** Content that the mock acli process writes as stdout */
+  /** Content that the mock acli process writes to the --output-file temp file */
   outputFileContent?: string;
   /** Content written to stderr */
   stderr?: string;
+  /** Raw stdout (noisy terminal output); defaults to empty string */
+  stdout?: string;
   /** Exit code; defaults to 0 */
   exitCode?: number;
   /** Artificial delay before resolving in ms */
@@ -23,21 +25,38 @@ export type MockAcliSpawnOptions = {
  * Creates a vi.fn() mock that stands in for the process-supervisor `spawn`
  * call made by `runRovoDev()`.  Resolves with a fake managed-run object whose
  * `.wait()` returns the configured exit result, or throws ENOENT.
+ *
+ * Also returns a `mockReadFile` function that should be used as the
+ * implementation for `fs.readFile` in tests.  When `runRovoDev()` reads the
+ * temp output file, `mockReadFile` returns the configured `outputFileContent`
+ * (or an empty string when it is absent).
  */
 export function createMockAcliSpawn(opts: MockAcliSpawnOptions): {
   spawnMock: ReturnType<typeof vi.fn>;
+  mockReadFile: (filePath: string, encoding: string) => Promise<string>;
 } {
   const spawnMock = vi.fn();
+
+  // Default mockReadFile — returns empty string unless overridden below.
+  let mockReadFile = async (_filePath: string, _encoding: string): Promise<string> => "";
 
   if (opts.throwEnoent) {
     const enoent = Object.assign(new Error("spawn acli ENOENT"), { code: "ENOENT" });
     spawnMock.mockRejectedValue(enoent);
-    return { spawnMock };
+    return { spawnMock, mockReadFile };
   }
 
   const exitCode = opts.exitCode ?? 0;
-  const stdout = opts.outputFileContent ?? "";
+  // stdout is the raw noisy terminal output (not the clean content).
+  const stdoutRaw = opts.stdout ?? "";
   const stderr = opts.stderr ?? "";
+  const fileContent = opts.outputFileContent ?? "";
+
+  // mockReadFile simulates acli having written the clean response to the temp
+  // file referenced by --output-file.
+  mockReadFile = async (_filePath: string, _encoding: string): Promise<string> => {
+    return fileContent;
+  };
 
   const waitImpl = async () => {
     if (opts.delayMs && opts.delayMs > 0) {
@@ -48,7 +67,7 @@ export function createMockAcliSpawn(opts: MockAcliSpawnOptions): {
       exitCode,
       exitSignal: null,
       durationMs: opts.delayMs ?? 1,
-      stdout,
+      stdout: stdoutRaw,
       stderr,
       timedOut: false,
       noOutputTimedOut: false,
@@ -65,7 +84,7 @@ export function createMockAcliSpawn(opts: MockAcliSpawnOptions): {
   };
 
   spawnMock.mockResolvedValue(managedRun);
-  return { spawnMock };
+  return { spawnMock, mockReadFile };
 }
 
 export type MockOutputFileHelpers = {
