@@ -47,8 +47,8 @@ export type CheckRovoDevAvailabilityOptions = {
  */
 const REQUIRED_ROVODEV_ENV_VARS = [
   "OPENCLAW_LIVE_ROVODEV_TOKEN",
-  "ROVODEV_SITE_URL",
-  "ROVODEV_USER_EMAIL",
+  "OPENCLAW_LIVE_ROVODEV_SITE",
+  "OPENCLAW_LIVE_ROVODEV_EMAIL",
 ] as const;
 
 /**
@@ -68,8 +68,7 @@ export async function checkRovoDevAvailability(
   if (!onPath) {
     return {
       available: false,
-      reason:
-        "acli is not installed or not on PATH. " + "Install with: npm install -g @atlassian/acli",
+      reason: "acli is not installed or not on PATH. Install with: npm install -g @atlassian/acli",
     };
   }
 

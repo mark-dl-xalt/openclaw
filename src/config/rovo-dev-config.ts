@@ -13,10 +13,10 @@
 export const ROVODEV_TOKEN_ENV = "OPENCLAW_LIVE_ROVODEV_TOKEN";
 
 /** Atlassian site base URL, e.g. https://myorg.atlassian.net */
-export const ROVODEV_SITE_URL_ENV = "ROVODEV_SITE_URL";
+export const ROVODEV_SITE_URL_ENV = "OPENCLAW_LIVE_ROVODEV_SITE";
 
 /** User email associated with the token. */
-export const ROVODEV_USER_EMAIL_ENV = "ROVODEV_USER_EMAIL";
+export const ROVODEV_USER_EMAIL_ENV = "OPENCLAW_LIVE_ROVODEV_EMAIL";
 
 const REQUIRED_ROVODEV_ENV_VARS = [
   ROVODEV_TOKEN_ENV,

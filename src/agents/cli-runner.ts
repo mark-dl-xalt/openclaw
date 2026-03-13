@@ -43,6 +43,9 @@ import {
   resolveBootstrapTotalMaxChars,
 } from "./pi-embedded-helpers.js";
 import type { EmbeddedPiRunResult } from "./pi-embedded-runner.js";
+import { resolveRovoDevCredential } from "./rovo-dev-auth.js";
+import { ROVODEV_BACKEND_ID } from "./rovo-dev-backends.js";
+import { buildRovoDevEnv } from "./rovo-dev-runner.js";
 import { buildSystemPromptReport } from "./system-prompt-report.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "./workspace-run.js";
 
@@ -287,6 +290,13 @@ export async function runCliAgent(params: {
 
         const env = (() => {
           const next = { ...process.env, ...backend.env };
+          // T096: Inject Rovo Dev service-account credentials into acli subprocess
+          if (backendResolved.id === ROVODEV_BACKEND_ID) {
+            const credential = resolveRovoDevCredential();
+            if (credential) {
+              Object.assign(next, buildRovoDevEnv(credential));
+            }
+          }
           for (const key of backend.clearEnv ?? []) {
             delete next[key];
           }
