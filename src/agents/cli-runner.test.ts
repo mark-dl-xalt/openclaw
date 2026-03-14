@@ -1,10 +1,11 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import { runCliAgent } from "./cli-runner.js";
 import { resolveCliNoOutputTimeoutMs } from "./cli-runner/helpers.js";
+import { FailoverError } from "./failover-error.js";
 
 const supervisorSpawnMock = vi.fn();
 const enqueueSystemEventMock = vi.fn();
@@ -313,5 +314,204 @@ describe("resolveCliNoOutputTimeoutMs", () => {
       useResume: true,
     });
     expect(timeoutMs).toBe(42_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T100-T103: OAuth credential wiring into cli-runner
+// ---------------------------------------------------------------------------
+
+const resolveRovoDevCredentialV2Spy = vi.fn();
+const resolveRovoDevCredentialSpy = vi.fn();
+
+vi.mock("./rovo-dev-auth.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./rovo-dev-auth.js")>();
+  return {
+    ...actual,
+    resolveRovoDevCredential: (...args: unknown[]) => resolveRovoDevCredentialSpy(...args),
+    resolveRovoDevCredentialV2: (...args: unknown[]) => resolveRovoDevCredentialV2Spy(...args),
+  };
+});
+
+vi.mock("./rovo-dev-runner.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./rovo-dev-runner.js")>();
+  return {
+    ...actual,
+    buildRovoDevEnv: vi.fn().mockReturnValue({
+      USER_EMAIL: "mock@example.com",
+      USER_API_TOKEN: "mock-token",
+    }),
+  };
+});
+
+const ROVO_PARAMS = {
+  sessionId: "s-oauth-test",
+  sessionFile: "/tmp/session.jsonl",
+  workspaceDir: "/tmp",
+  prompt: "hello rovo",
+  provider: "rovo-dev",
+  model: "default",
+  timeoutMs: 5_000,
+  runId: "run-oauth-test",
+} as const;
+
+// T100: OAuth happy path
+describe("T100: cli-runner uses resolveRovoDevCredentialV2 when tokenStore is provided", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    resolveRovoDevCredentialV2Spy.mockReset();
+    resolveRovoDevCredentialSpy.mockReset();
+    supervisorSpawnMock.mockReset();
+  });
+
+  it("calls resolveRovoDevCredentialV2 (not V1) when tokenStore is provided", async () => {
+    const mockTokenStore = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+
+    resolveRovoDevCredentialV2Spy.mockResolvedValue({
+      credential: {
+        type: "oauth",
+        accessToken: "oauth-token-t100",
+        refreshToken: "oauth-refresh-t100",
+        site: "https://myorg.atlassian.net",
+        email: "user@myorg.com",
+        expiresAtMs: Date.now() + 300_000,
+      },
+    });
+
+    supervisorSpawnMock.mockResolvedValueOnce(
+      createManagedRun({
+        reason: "exit",
+        exitCode: 0,
+        exitSignal: null,
+        durationMs: 50,
+        stdout: "response from rovo",
+        stderr: "",
+        timedOut: false,
+        noOutputTimedOut: false,
+      }),
+    );
+
+    await runCliAgent({ ...ROVO_PARAMS, tokenStore: mockTokenStore });
+
+    expect(resolveRovoDevCredentialV2Spy).toHaveBeenCalledTimes(1);
+    expect(resolveRovoDevCredentialSpy).not.toHaveBeenCalled();
+  });
+});
+
+// T101: AUTH_REQUIRED -> FailoverError
+describe("T101: AUTH_REQUIRED propagates as FailoverError(reason=auth_required, status=401)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    resolveRovoDevCredentialV2Spy.mockReset();
+    resolveRovoDevCredentialSpy.mockReset();
+  });
+
+  it("throws FailoverError when tokenStore has no token", async () => {
+    const mockTokenStore = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+
+    resolveRovoDevCredentialV2Spy.mockResolvedValue({
+      credential: null,
+      reason: "AUTH_REQUIRED",
+    });
+
+    let thrown: unknown;
+    try {
+      await runCliAgent({ ...ROVO_PARAMS, tokenStore: mockTokenStore });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(FailoverError);
+    const fe = thrown as FailoverError;
+    expect(fe.reason).toBe("auth_required");
+    expect(fe.status).toBe(401);
+  });
+});
+
+// T102: REFRESH_FAILED -> FailoverError
+describe("T102: REFRESH_FAILED propagates as FailoverError(reason=auth_required, status=401)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    resolveRovoDevCredentialV2Spy.mockReset();
+    resolveRovoDevCredentialSpy.mockReset();
+  });
+
+  it("throws FailoverError when token refresh fails", async () => {
+    const mockTokenStore = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+
+    resolveRovoDevCredentialV2Spy.mockResolvedValue({
+      credential: null,
+      reason: "REFRESH_FAILED",
+    });
+
+    let thrown: unknown;
+    try {
+      await runCliAgent({ ...ROVO_PARAMS, tokenStore: mockTokenStore });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(FailoverError);
+    const fe = thrown as FailoverError;
+    expect(fe.reason).toBe("auth_required");
+    expect(fe.status).toBe(401);
+  });
+});
+
+// T103: No tokenStore -> V1 fallback
+describe("T103: no tokenStore falls back to resolveRovoDevCredential (V1)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    resolveRovoDevCredentialV2Spy.mockReset();
+    resolveRovoDevCredentialSpy.mockReset();
+    supervisorSpawnMock.mockReset();
+  });
+
+  it("calls V1 and does NOT call V2 when tokenStore is absent", async () => {
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_TOKEN", "env-token-t103");
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_SITE", "https://myorg.atlassian.net");
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_EMAIL", "svc@myorg.com");
+
+    resolveRovoDevCredentialSpy.mockReturnValue({
+      type: "service-account",
+      accessToken: "env-token-t103",
+      site: "https://myorg.atlassian.net",
+      email: "svc@myorg.com",
+    });
+
+    supervisorSpawnMock.mockResolvedValueOnce(
+      createManagedRun({
+        reason: "exit",
+        exitCode: 0,
+        exitSignal: null,
+        durationMs: 50,
+        stdout: "ok from rovo",
+        stderr: "",
+        timedOut: false,
+        noOutputTimedOut: false,
+      }),
+    );
+
+    // No tokenStore — should use V1 path
+    await runCliAgent({ ...ROVO_PARAMS });
+
+    expect(resolveRovoDevCredentialV2Spy).not.toHaveBeenCalled();
+    expect(supervisorSpawnMock).toHaveBeenCalledTimes(1);
   });
 });

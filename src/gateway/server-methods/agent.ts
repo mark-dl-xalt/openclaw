@@ -619,6 +619,7 @@ export const agentHandlers: GatewayRequestHandlers = {
           workspaceDir: sessionEntry?.spawnedWorkspaceDir,
         }),
         senderIsOwner,
+        tokenStore: context.tokenStore ?? undefined,
       },
       runId,
       idempotencyKey: idem,

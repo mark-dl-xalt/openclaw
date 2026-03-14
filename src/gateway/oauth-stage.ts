@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import cookieParser from "cookie-parser";
 import express from "express";
 import session from "express-session";
+import type { TokenStore } from "../auth/token-store.js";
 import { createTokenStore } from "../auth/token-store.js";
 import { createAuthRoutes } from "../routes/auth-atlassian-routes.js";
 
@@ -20,13 +21,14 @@ const OAUTH_PREFIX = "/auth/atlassian";
  * Creates a gateway stage handler for OAuth requests.
  * Returns an async function matching the `GatewayHttpRequestStage.run` shape.
  */
-export async function createOAuthStageHandler(): Promise<
-  (req: IncomingMessage, res: ServerResponse) => Promise<boolean>
-> {
+export async function createOAuthStageHandler(): Promise<{
+  handleRequest: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
+  tokenStore: TokenStore | null;
+}> {
   const clientId = process.env.ATLASSIAN_OAUTH_CLIENT_ID;
   if (!clientId) {
     // OAuth not configured — stage is a no-op.
-    return async () => false;
+    return { handleRequest: async () => false, tokenStore: null };
   }
 
   const tokenStore = await createTokenStore();
@@ -106,7 +108,7 @@ export async function createOAuthStageHandler(): Promise<
   });
 
   // Stage handler: returns true if the request was handled by OAuth routes.
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
+  const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
 
     if (OAUTH_PATHS.has(path) || path.startsWith(OAUTH_PREFIX)) {
@@ -126,4 +128,6 @@ export async function createOAuthStageHandler(): Promise<
 
     return false;
   };
+
+  return { handleRequest, tokenStore };
 }

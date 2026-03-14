@@ -91,6 +91,7 @@ export async function createGatewayRuntimeState(params: {
   ) => ChatRunEntry | undefined;
   chatAbortControllers: Map<string, ChatAbortControllerEntry>;
   toolEventRecipients: ReturnType<typeof createToolEventRecipientRegistry>;
+  oauthTokenStore: import("../auth/token-store.js").TokenStore | null;
 }> {
   let canvasHost: CanvasHostHandler | null = null;
   if (params.canvasHostEnabled) {
@@ -147,7 +148,9 @@ export async function createGatewayRuntimeState(params: {
     );
   }
   // Initialize OAuth stage handler (no-op if ATLASSIAN_OAUTH_CLIENT_ID is not set).
-  const handleOAuthRequest = await createOAuthStageHandler();
+  const oauthStage = await createOAuthStageHandler();
+  const handleOAuthRequest = oauthStage.handleRequest;
+  const oauthTokenStore = oauthStage.tokenStore;
 
   const httpServers: HttpServer[] = [];
   const httpBindHosts: string[] = [];
@@ -238,5 +241,6 @@ export async function createGatewayRuntimeState(params: {
     removeChatRun,
     chatAbortControllers,
     toolEventRecipients,
+    oauthTokenStore,
   };
 }

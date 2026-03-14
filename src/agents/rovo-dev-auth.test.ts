@@ -418,6 +418,7 @@ describe("Token refresh flow (T044)", () => {
     const result = await resolveRovoDevCredentialV2({ tokenStore: mockTokenStore });
 
     expect(mockTokenStore.set).toHaveBeenCalledWith(
+      "default",
       expect.objectContaining({
         accessToken: "refreshed-access-token",
         refreshToken: "refreshed-refresh-token",
@@ -448,5 +449,63 @@ describe("Token refresh flow (T044)", () => {
     expect(mockTokenStore.delete).toHaveBeenCalled();
     expect(result.credential).toBeNull();
     expect(result.reason).toBe("REFRESH_FAILED");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T099: tokenStore.set signature — must be called with 2 args (userId, token)
+// ---------------------------------------------------------------------------
+
+describe("resolveRovoDevCredentialV2 — tokenStore.set called with (userId, token) (T099)", () => {
+  const mockTokenStore = {
+    get: vi.fn(),
+    set: vi.fn(),
+    delete: vi.fn(),
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it("tokenStore.set is called with 2 args — (userId, token) — not 1 merged object", async () => {
+    const storedToken = {
+      accessToken: "expiring-token-t099",
+      refreshToken: "refresh-token-t099",
+      site: "https://myorg.atlassian.net",
+      email: "user-t099@example.com",
+      expiresAtMs: Date.now() + 30_000,
+      accountId: "account-id-t099",
+    };
+    mockTokenStore.get.mockResolvedValue(storedToken);
+    mockTokenStore.set.mockResolvedValue(undefined);
+
+    vi.mocked(refreshOAuthToken).mockResolvedValue({
+      access_token: "refreshed-access-t099",
+      refresh_token: "refreshed-refresh-t099",
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: "read:me",
+    });
+
+    await resolveRovoDevCredentialV2({ tokenStore: mockTokenStore, userId: "user-t099" });
+
+    expect(mockTokenStore.set).toHaveBeenCalledTimes(1);
+
+    const setCall = mockTokenStore.set.mock.calls[0];
+
+    // First arg MUST be the userId string
+    expect(typeof setCall?.[0]).toBe("string");
+    expect(setCall?.[0]).toBe("user-t099");
+
+    // Second arg MUST be the token object
+    expect(typeof setCall?.[1]).toBe("object");
+    expect(setCall?.[1]).toMatchObject({
+      accessToken: "refreshed-access-t099",
+      refreshToken: "refreshed-refresh-t099",
+    });
+
+    // Exactly 2 args, not 1
+    expect(setCall?.length).toBe(2);
   });
 });

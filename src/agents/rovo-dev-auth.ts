@@ -127,7 +127,7 @@ export async function resolveRovoDevCredentialV2(opts: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic token store interface
     get: (userId: string) => Promise<any>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic token store interface
-    set: (...args: any[]) => Promise<void>;
+    set: (userId: string, token: any) => Promise<void>;
     delete: (userId: string) => Promise<void>;
   };
   userId?: string;
@@ -153,7 +153,7 @@ export async function resolveRovoDevCredentialV2(opts: {
       const newExpiresAtMs = Date.now() + refreshed.expires_in * 1000;
 
       // Persist the refreshed token.
-      await opts.tokenStore.set({
+      await opts.tokenStore.set(userId, {
         ...stored,
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,

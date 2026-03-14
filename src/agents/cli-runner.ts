@@ -44,7 +44,7 @@ import {
   resolveBootstrapTotalMaxChars,
 } from "./pi-embedded-helpers.js";
 import type { EmbeddedPiRunResult } from "./pi-embedded-runner.js";
-import { resolveRovoDevCredential } from "./rovo-dev-auth.js";
+import { resolveRovoDevCredential, resolveRovoDevCredentialV2 } from "./rovo-dev-auth.js";
 import { ROVODEV_BACKEND_ID } from "./rovo-dev-backends.js";
 import { buildRovoDevEnv } from "./rovo-dev-runner.js";
 import { buildSystemPromptReport } from "./system-prompt-report.js";
@@ -73,6 +73,8 @@ export async function runCliAgent(params: {
   /** Backward-compat fallback when only the previous signature is available. */
   bootstrapPromptWarningSignature?: string;
   images?: ImageContent[];
+  /** OAuth token store for Rovo Dev credential resolution (V2). */
+  tokenStore?: import("../auth/token-store.js").TokenStore;
 }): Promise<EmbeddedPiRunResult> {
   const started = Date.now();
   const workspaceResolution = resolveRunWorkspaceDir({
@@ -289,13 +291,37 @@ export async function runCliAgent(params: {
           log.info(`cli argv: ${backend.command} ${logArgs.join(" ")}`);
         }
 
-        const env = (() => {
+        const env = await (async () => {
           const next = { ...process.env, ...backend.env };
-          // T096: Inject Rovo Dev service-account credentials into acli subprocess
+          // T106: Inject Rovo Dev credentials — OAuth V2 when tokenStore available, V1 fallback otherwise
           if (backendResolved.id === ROVODEV_BACKEND_ID) {
-            const credential = resolveRovoDevCredential();
-            if (credential) {
-              Object.assign(next, buildRovoDevEnv(credential));
+            if (params.tokenStore) {
+              const result = await resolveRovoDevCredentialV2({
+                tokenStore: params.tokenStore,
+                userId: "default",
+              });
+              if (result.reason === "AUTH_REQUIRED" || result.reason === "REFRESH_FAILED") {
+                throw new FailoverError(
+                  result.reason === "AUTH_REQUIRED"
+                    ? "Rovo Dev requires authentication. Please sign in at /login."
+                    : "Rovo Dev OAuth token refresh failed. Please sign in again at /login.",
+                  {
+                    reason: "auth_required",
+                    provider: params.provider,
+                    model: modelId,
+                    status: 401,
+                  },
+                );
+              }
+              if (result.credential) {
+                Object.assign(next, buildRovoDevEnv(result.credential));
+              }
+            } else {
+              // T096: Fallback to service-account env var credentials
+              const credential = resolveRovoDevCredential();
+              if (credential) {
+                Object.assign(next, buildRovoDevEnv(credential));
+              }
             }
           }
           for (const key of backend.clearEnv ?? []) {

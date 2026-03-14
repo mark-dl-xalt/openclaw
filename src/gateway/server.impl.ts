@@ -599,6 +599,7 @@ export async function startGatewayServer(
     removeChatRun,
     chatAbortControllers,
     toolEventRecipients,
+    oauthTokenStore,
   } = await createGatewayRuntimeState({
     cfg: cfgAtStart,
     bindHost,
@@ -816,6 +817,7 @@ export async function startGatewayServer(
 
   const gatewayRequestContext: import("./server-methods/types.js").GatewayRequestContext = {
     deps,
+    tokenStore: oauthTokenStore,
     cron,
     cronStorePath,
     execApprovalManager,
