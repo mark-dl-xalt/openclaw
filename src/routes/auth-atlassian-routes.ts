@@ -99,17 +99,21 @@ export function createAuthRoutes(opts: {
 
       // Exchange code for token.
       const code = req.query.code as string;
+      const tokenPayload: Record<string, string> = {
+        grant_type: "authorization_code",
+        client_id: clientId,
+        code,
+        redirect_uri: redirectUri,
+        code_verifier: flowState.codeVerifier,
+      };
+      // Only include client_secret for confidential clients (non-PKCE).
+      if (clientSecret) {
+        tokenPayload.client_secret = clientSecret;
+      }
       const tokenResponse = await fetchFn(`${ATLASSIAN_AUTH_BASE}/oauth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          grant_type: "authorization_code",
-          client_id: clientId,
-          client_secret: clientSecret,
-          code,
-          redirect_uri: redirectUri,
-          code_verifier: flowState.codeVerifier,
-        }),
+        body: JSON.stringify(tokenPayload),
       });
 
       if (!tokenResponse.ok) {
