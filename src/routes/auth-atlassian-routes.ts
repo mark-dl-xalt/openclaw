@@ -137,8 +137,9 @@ export function createAuthRoutes(opts: {
       // Fetch user identity.
       const userIdentity = await fetchAtlassianUserIdentity(tokenData.access_token, fetchFn);
 
-      // Store token.
-      await tokenStore.set(userIdentity.account_id, {
+      // Store token under account ID and "default" (POC: CLI runner uses "default"
+      // because WebSocket requests don't carry HTTP session context).
+      const oauthToken = {
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token,
         expiresAt: Date.now() + tokenData.expires_in * 1000,
@@ -146,7 +147,9 @@ export function createAuthRoutes(opts: {
         email: userIdentity.email,
         accountId: userIdentity.account_id,
         scope: tokenData.scope,
-      });
+      };
+      await tokenStore.set(userIdentity.account_id, oauthToken);
+      await tokenStore.set("default", oauthToken);
 
       // Create session.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
