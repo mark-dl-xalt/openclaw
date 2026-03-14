@@ -113,6 +113,8 @@ export function createAuthRoutes(opts: {
       });
 
       if (!tokenResponse.ok) {
+        const errBody = await tokenResponse.text().catch(() => "(no body)");
+        console.error("[oauth-callback] token exchange failed:", tokenResponse.status, errBody);
         res.redirect("/login?reason=error");
         return;
       }
@@ -141,7 +143,8 @@ export function createAuthRoutes(opts: {
       }
 
       res.redirect("/dashboard");
-    } catch {
+    } catch (err) {
+      console.error("[oauth-callback] error:", err);
       res.redirect("/login?reason=error");
     }
   });
