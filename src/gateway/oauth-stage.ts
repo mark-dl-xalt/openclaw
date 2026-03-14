@@ -89,7 +89,7 @@ export async function createOAuthStageHandler(): Promise<
     clientSecret: process.env.ATLASSIAN_OAUTH_CLIENT_SECRET ?? "",
     redirectUri,
     scopes:
-      "read:jira-work write:jira-work read:confluence-content.all read:bitbucket-repo offline_access",
+      "read:me read:jira-work write:jira-work read:confluence-content.all read:bitbucket-repo offline_access",
   });
   app.use("/auth/atlassian", authRouter);
 
