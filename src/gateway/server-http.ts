@@ -722,6 +722,8 @@ export function createGatewayHttpServer(opts: {
   openAiChatCompletionsConfig?: import("../config/types.gateway.js").GatewayHttpChatCompletionsConfig;
   openResponsesEnabled: boolean;
   openResponsesConfig?: import("../config/types.gateway.js").GatewayHttpResponsesConfig;
+  /** Optional OAuth stage handler for Atlassian login flow. */
+  handleOAuthRequest?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
   strictTransportSecurityHeader?: string;
   handleHooksRequest: HooksRequestHandler;
   handlePluginRequest?: PluginHttpRequestHandler;
@@ -749,6 +751,7 @@ export function createGatewayHttpServer(opts: {
     resolvedAuth,
     rateLimiter,
     getReadiness,
+    handleOAuthRequest,
   } = opts;
   const httpServer: HttpServer = opts.tlsOptions
     ? createHttpsServer(opts.tlsOptions, (req, res) => {
@@ -805,6 +808,12 @@ export function createGatewayHttpServer(opts: {
           run: () => handleSlackHttpRequest(req, res),
         },
       ];
+      if (handleOAuthRequest) {
+        requestStages.push({
+          name: "oauth-atlassian",
+          run: () => handleOAuthRequest(req, res),
+        });
+      }
       if (openResponsesEnabled) {
         requestStages.push({
           name: "openresponses",

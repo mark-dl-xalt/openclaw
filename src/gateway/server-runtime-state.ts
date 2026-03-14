@@ -12,6 +12,7 @@ import type { ChatAbortControllerEntry } from "./chat-abort.js";
 import type { ControlUiRootState } from "./control-ui.js";
 import type { HooksConfigResolved } from "./hooks.js";
 import { isLoopbackHost, resolveGatewayListenHosts } from "./net.js";
+import { createOAuthStageHandler } from "./oauth-stage.js";
 import {
   createGatewayBroadcaster,
   type GatewayBroadcastFn,
@@ -145,6 +146,9 @@ export async function createGatewayRuntimeState(params: {
         "Host-header origin fallback weakens origin checks and should only be used as break-glass.",
     );
   }
+  // Initialize OAuth stage handler (no-op if ATLASSIAN_OAUTH_CLIENT_ID is not set).
+  const handleOAuthRequest = await createOAuthStageHandler();
+
   const httpServers: HttpServer[] = [];
   const httpBindHosts: string[] = [];
   for (const host of bindHosts) {
@@ -166,6 +170,7 @@ export async function createGatewayRuntimeState(params: {
       rateLimiter: params.rateLimiter,
       getReadiness: params.getReadiness,
       tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
+      handleOAuthRequest,
     });
     try {
       await listenGatewayHttpServer({
