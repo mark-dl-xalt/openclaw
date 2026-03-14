@@ -56,6 +56,7 @@ export function createAuthRoutes(opts: {
     storeFlowState({ state, codeVerifier, createdAt: Date.now() });
 
     const params = new URLSearchParams({
+      audience: "api.atlassian.com",
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: "code",
@@ -63,6 +64,7 @@ export function createAuthRoutes(opts: {
       state,
       code_challenge: codeChallenge,
       code_challenge_method: "S256",
+      prompt: "consent",
     });
 
     res.redirect(`${ATLASSIAN_AUTH_BASE}/authorize?${params.toString()}`);
@@ -110,6 +112,14 @@ export function createAuthRoutes(opts: {
       if (clientSecret) {
         tokenPayload.client_secret = clientSecret;
       }
+      console.log("[oauth-callback] token exchange request:", {
+        url: `${ATLASSIAN_AUTH_BASE}/oauth/token`,
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        code_length: code?.length,
+        code_verifier_length: flowState.codeVerifier?.length,
+        has_client_secret: !!clientSecret,
+      });
       const tokenResponse = await fetchFn(`${ATLASSIAN_AUTH_BASE}/oauth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
