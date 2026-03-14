@@ -108,7 +108,6 @@ export function createAuthRoutes(opts: {
         redirect_uri: redirectUri,
         code_verifier: flowState.codeVerifier,
       };
-      // Only include client_secret for confidential clients (non-PKCE).
       if (clientSecret) {
         tokenPayload.client_secret = clientSecret;
       }
@@ -122,8 +121,8 @@ export function createAuthRoutes(opts: {
       });
       const tokenResponse = await fetchFn(`${ATLASSIAN_AUTH_BASE}/oauth/token`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tokenPayload),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(tokenPayload).toString(),
       });
 
       if (!tokenResponse.ok) {

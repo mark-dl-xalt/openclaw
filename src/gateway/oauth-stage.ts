@@ -86,7 +86,7 @@ export async function createOAuthStageHandler(): Promise<
   const authRouter = createAuthRoutes({
     tokenStore,
     clientId,
-    clientSecret: "", // PKCE public client — no secret
+    clientSecret: process.env.ATLASSIAN_OAUTH_CLIENT_SECRET ?? "",
     redirectUri,
     scopes:
       "read:jira-work write:jira-work read:confluence-content.all read:bitbucket-repo offline_access",
