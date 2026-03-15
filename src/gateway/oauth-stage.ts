@@ -56,8 +56,8 @@ export async function createOAuthStageHandler(): Promise<{
   app.use(
     session({
       secret: sessionSecret,
-      resave: false,
-      saveUninitialized: false,
+      resave: true,
+      saveUninitialized: true,
       cookie: {
         httpOnly: true,
         sameSite: "lax",
