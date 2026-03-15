@@ -106,6 +106,12 @@ export async function createOAuthStageHandler(): Promise<{
   app.get("/connect-rovo", (req, res) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
     const session = req.session as any;
+    console.log("[connect-rovo] session check:", {
+      hasSession: !!session,
+      userId: session?.userId ?? "(none)",
+      sessionID: (req as unknown as Record<string, unknown>).sessionID ?? "(none)",
+      cookies: req.headers.cookie ?? "(no cookies)",
+    });
     if (!session?.userId) {
       res.redirect("/login");
       return;
