@@ -17,14 +17,7 @@ import { createTokenStore } from "../auth/token-store.js";
 import { createAuthRoutes } from "../routes/auth-atlassian-routes.js";
 
 // Paths this stage handles (checked before delegating to Express).
-const OAUTH_PATHS = new Set([
-  "/login",
-  "/auth/signout",
-  "/connect-rovo",
-  "/dashboard",
-  "/test-session",
-  "/test-session-check",
-]);
+const OAUTH_PATHS = new Set(["/login", "/auth/signout", "/connect-rovo", "/dashboard"]);
 const OAUTH_PREFIX = "/auth/atlassian";
 
 /**
@@ -56,44 +49,19 @@ export async function createOAuthStageHandler(): Promise<{
   app.use(
     session({
       secret: sessionSecret,
-      resave: true,
-      saveUninitialized: true,
+      resave: false,
+      saveUninitialized: false,
       cookie: {
         httpOnly: true,
         sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
+        // NOTE: Do NOT use process.env.NODE_ENV here — Vite replaces it at build
+        // time with "production", making cookies HTTPS-only even in dev/staging.
+        // Use a dedicated runtime env var instead.
+        secure: process.env.OPENCLAW_COOKIE_SECURE === "true",
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
       },
     }),
   );
-
-  // Diagnostic: test session cookie setting (temporary — remove after debugging).
-  app.get("/test-session", (req, res) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
-    const session = req.session as Record<string, unknown>;
-    session.test = "hello";
-    // Manual cookie test — does setHeader work at all on this response?
-    res.setHeader("Set-Cookie", "manual-test=works; Path=/");
-    console.log("[test-session] diagnostics:", {
-      endIsOwn: Object.prototype.hasOwnProperty.call(res, "end"),
-      writeIsOwn: Object.prototype.hasOwnProperty.call(res, "write"),
-      hasSessionObj: !!req.session,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- diagnostic
-      sessionCookie: JSON.stringify((req.session as any)?.cookie),
-      sessionID: (req as unknown as Record<string, unknown>).sessionID,
-      headersSent: res.headersSent,
-    });
-    res.json({ set: true, sessionID: (req as unknown as Record<string, unknown>).sessionID });
-  });
-  app.get("/test-session-check", (req, res) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
-    const session = req.session as Record<string, unknown>;
-    res.json({
-      test: session.test ?? "(not set)",
-      sessionID: (req as unknown as Record<string, unknown>).sessionID,
-      cookies: req.headers.cookie ?? "(none)",
-    });
-  });
 
   // Login page.
   app.get("/login", (req, res) => {
@@ -141,12 +109,6 @@ export async function createOAuthStageHandler(): Promise<{
   app.get("/connect-rovo", (req, res) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
     const session = req.session as any;
-    console.log("[connect-rovo] session check:", {
-      hasSession: !!session,
-      userId: session?.userId ?? "(none)",
-      sessionID: (req as unknown as Record<string, unknown>).sessionID ?? "(none)",
-      cookies: req.headers.cookie ?? "(no cookies)",
-    });
     if (!session?.userId) {
       res.redirect("/login");
       return;

@@ -191,25 +191,11 @@ export function createAuthRoutes(opts: {
       // Returning users who already connected go straight to /dashboard.
       const redirectTarget = session?.rovoConnected ? "/dashboard" : "/connect-rovo";
 
-      console.log("[oauth-callback] session created:", {
-        userId: session?.userId,
-        email: session?.email,
-        sessionID: (req as unknown as Record<string, unknown>).sessionID,
-        redirectTarget,
-        hasSave: typeof session?.save === "function",
-      });
-
       if (session?.save) {
         session.save((err: Error | null) => {
           if (err) {
             console.error("[oauth-callback] session save error:", err);
           }
-          console.log(
-            "[oauth-callback] session saved, redirecting to:",
-            redirectTarget,
-            "set-cookie:",
-            res.getHeader("set-cookie"),
-          );
           res.redirect(redirectTarget);
         });
       } else {
