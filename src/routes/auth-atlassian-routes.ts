@@ -177,20 +177,29 @@ export function createAuthRoutes(opts: {
       await tokenStore.set(userIdentity.account_id, oauthToken);
       await tokenStore.set("default", oauthToken);
 
-      // Create session.
+      // Create session — must save explicitly before redirect so the session
+      // cookie is set before the browser follows the 302.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
       const session = (req as any).session;
       if (session) {
         session.userId = userIdentity.account_id;
         session.email = userIdentity.email;
+        session.displayName = userIdentity.name;
       }
 
       // T129: New users (no Rovo Dev connected yet) land on /connect-rovo.
       // Returning users who already connected go straight to /dashboard.
-      if (session?.rovoConnected) {
-        res.redirect("/dashboard");
+      const redirectTarget = session?.rovoConnected ? "/dashboard" : "/connect-rovo";
+
+      if (session?.save) {
+        session.save((err: Error | null) => {
+          if (err) {
+            console.error("[oauth-callback] session save error:", err);
+          }
+          res.redirect(redirectTarget);
+        });
       } else {
-        res.redirect("/connect-rovo");
+        res.redirect(redirectTarget);
       }
     } catch (err) {
       console.error("[oauth-callback] error:", err);
@@ -474,12 +483,11 @@ export function createAuthRoutes(opts: {
       const accountId: string = meData.account_id ?? meData.accountId ?? "";
 
       // Map accessible resources to a consistent shape.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- upstream shape varies
       const accessibleResources = (Array.isArray(resourcesData) ? resourcesData : []).map(
-        (r: any) => ({
-          id: r.id,
-          name: r.name,
-          url: r.url,
+        (r: Record<string, unknown>) => ({
+          id: r.id as string,
+          name: r.name as string,
+          url: r.url as string,
         }),
       );
 
