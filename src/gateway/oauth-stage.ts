@@ -74,14 +74,15 @@ export async function createOAuthStageHandler(): Promise<{
     session.test = "hello";
     // Manual cookie test — does setHeader work at all on this response?
     res.setHeader("Set-Cookie", "manual-test=works; Path=/");
-    console.log(
-      "[test-session] res.end hooked?",
-      res.end.name,
-      "res type:",
-      res.constructor.name,
-      "headersSent:",
-      res.headersSent,
-    );
+    console.log("[test-session] diagnostics:", {
+      endIsOwn: Object.prototype.hasOwnProperty.call(res, "end"),
+      writeIsOwn: Object.prototype.hasOwnProperty.call(res, "write"),
+      hasSessionObj: !!req.session,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- diagnostic
+      sessionCookie: JSON.stringify((req.session as any)?.cookie),
+      sessionID: (req as unknown as Record<string, unknown>).sessionID,
+      headersSent: res.headersSent,
+    });
     res.json({ set: true, sessionID: (req as unknown as Record<string, unknown>).sessionID });
   });
   app.get("/test-session-check", (req, res) => {
