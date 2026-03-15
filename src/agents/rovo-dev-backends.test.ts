@@ -41,8 +41,8 @@ describe("checkRovoDevAvailability (T016)", () => {
 
   it("returns { available: true } when acli is on PATH and required env vars are present", async () => {
     vi.stubEnv("OPENCLAW_LIVE_ROVODEV_TOKEN", "test-token");
-    vi.stubEnv("ROVODEV_SITE_URL", "https://test.atlassian.net");
-    vi.stubEnv("ROVODEV_USER_EMAIL", "test@example.com");
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_SITE", "https://test.atlassian.net");
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_EMAIL", "test@example.com");
 
     const result = await checkRovoDevAvailability({
       checkPath: async () => true,
@@ -53,16 +53,18 @@ describe("checkRovoDevAvailability (T016)", () => {
 
   it("returns { available: false, reason } when acli is not on PATH", async () => {
     vi.stubEnv("OPENCLAW_LIVE_ROVODEV_TOKEN", "test-token");
-    vi.stubEnv("ROVODEV_SITE_URL", "https://test.atlassian.net");
-    vi.stubEnv("ROVODEV_USER_EMAIL", "test@example.com");
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_SITE", "https://test.atlassian.net");
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_EMAIL", "test@example.com");
 
     const result = await checkRovoDevAvailability({
       checkPath: async () => false,
     });
 
     expect(result.available).toBe(false);
-    expect(typeof result.reason).toBe("string");
-    expect(result.reason!.length).toBeGreaterThan(0);
+    if (!result.available) {
+      expect(typeof result.reason).toBe("string");
+      expect(result.reason.length).toBeGreaterThan(0);
+    }
   });
 
   it("returns { available: false, reason } when OPENCLAW_LIVE_ROVODEV_TOKEN env var is absent", async () => {
@@ -72,19 +74,23 @@ describe("checkRovoDevAvailability (T016)", () => {
     });
 
     expect(result.available).toBe(false);
-    expect(typeof result.reason).toBe("string");
+    if (!result.available) {
+      expect(typeof result.reason).toBe("string");
+    }
   });
 
-  it("returns { available: false, reason } when ROVODEV_SITE_URL is missing", async () => {
+  it("returns { available: false, reason } when OPENCLAW_LIVE_ROVODEV_SITE is missing", async () => {
     vi.stubEnv("OPENCLAW_LIVE_ROVODEV_TOKEN", "test-token");
-    // ROVODEV_SITE_URL deliberately absent
-    vi.stubEnv("ROVODEV_USER_EMAIL", "test@example.com");
+    // OPENCLAW_LIVE_ROVODEV_SITE deliberately absent
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_EMAIL", "test@example.com");
 
     const result = await checkRovoDevAvailability({
       checkPath: async () => true,
     });
 
     expect(result.available).toBe(false);
-    expect(typeof result.reason).toBe("string");
+    if (!result.available) {
+      expect(typeof result.reason).toBe("string");
+    }
   });
 });

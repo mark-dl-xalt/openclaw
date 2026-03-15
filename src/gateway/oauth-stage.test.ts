@@ -30,6 +30,11 @@ vi.mock("express", async () => {
     post: vi.fn(),
   };
   const express = vi.fn().mockReturnValue(app);
+  // express.json() is called as a static method on the express function.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test mock
+  (express as any).json = vi
+    .fn()
+    .mockReturnValue((_req: unknown, _res: unknown, next: () => void) => next());
   return { default: express };
 });
 

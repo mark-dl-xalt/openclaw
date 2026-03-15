@@ -15,6 +15,7 @@ import {
   sanitizeUserFacingText,
 } from "../../agents/pi-embedded-helpers.js";
 import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
+import { createTokenStore } from "../../auth/token-store.js";
 import {
   resolveGroupSessionKey,
   resolveSessionTranscriptPath,
@@ -225,6 +226,13 @@ export async function runAgentTurnWithFallback(params: {
             return (async () => {
               let lifecycleTerminalEmitted = false;
               try {
+                // T113-fix: Create tokenStore for OAuth credential injection (rovo-dev).
+                // The chat.send→auto-reply path doesn't thread tokenStore from the gateway
+                // context, so we create one here. FileTokenStore is stateless (reads from
+                // ~/.openclaw/tokens/) so multiple instances are safe.
+                const tokenStore = process.env.ATLASSIAN_OAUTH_CLIENT_ID
+                  ? await createTokenStore()
+                  : undefined;
                 const result = await runCliAgent({
                   sessionId: params.followupRun.run.sessionId,
                   sessionKey: params.sessionKey,
@@ -247,6 +255,7 @@ export async function runAgentTurnWithFallback(params: {
                       bootstrapPromptWarningSignaturesSeen.length - 1
                     ],
                   images: params.opts?.images,
+                  tokenStore,
                 });
                 bootstrapPromptWarningSignaturesSeen = resolveBootstrapWarningSignaturesSeen(
                   result.meta?.systemPromptReport,

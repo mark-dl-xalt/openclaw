@@ -46,7 +46,6 @@ import {
 import type { EmbeddedPiRunResult } from "./pi-embedded-runner.js";
 import { resolveRovoDevCredential, resolveRovoDevCredentialV2 } from "./rovo-dev-auth.js";
 import { ROVODEV_BACKEND_ID } from "./rovo-dev-backends.js";
-import { buildRovoDevEnv } from "./rovo-dev-runner.js";
 import { buildSystemPromptReport } from "./system-prompt-report.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "./workspace-run.js";
 
@@ -313,15 +312,12 @@ export async function runCliAgent(params: {
                   },
                 );
               }
-              if (result.credential) {
-                Object.assign(next, buildRovoDevEnv(result.credential));
-              }
+              // NOTE: acli authenticates via macOS keychain (ATAT tokens).
+              // USER_EMAIL / USER_API_TOKEN env var injection is not used.
             } else {
-              // T096: Fallback to service-account env var credentials
-              const credential = resolveRovoDevCredential();
-              if (credential) {
-                Object.assign(next, buildRovoDevEnv(credential));
-              }
+              // T096: Validate service-account credential is available (V1 path).
+              // acli authenticates via keychain — no env var injection needed.
+              resolveRovoDevCredential();
             }
           }
           for (const key of backend.clearEnv ?? []) {

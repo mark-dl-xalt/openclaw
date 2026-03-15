@@ -32,17 +32,18 @@ export type MockAcliSpawnOptions = {
  * (or an empty string when it is absent).
  */
 export function createMockAcliSpawn(opts: MockAcliSpawnOptions): {
-  spawnMock: ReturnType<typeof vi.fn>;
+  /** A function (not a vi.fn mock) to pass to mockImplementation(). */
+  spawnMock: (...args: unknown[]) => Promise<unknown>;
   mockReadFile: (filePath: string, encoding: string) => Promise<string>;
 } {
-  const spawnMock = vi.fn();
-
   // Default mockReadFile — returns empty string unless overridden below.
   let mockReadFile = async (_filePath: string, _encoding: string): Promise<string> => "";
 
   if (opts.throwEnoent) {
     const enoent = Object.assign(new Error("spawn acli ENOENT"), { code: "ENOENT" });
-    spawnMock.mockRejectedValue(enoent);
+    const spawnMock = async (): Promise<unknown> => {
+      throw enoent;
+    };
     return { spawnMock, mockReadFile };
   }
 
@@ -83,7 +84,8 @@ export function createMockAcliSpawn(opts: MockAcliSpawnOptions): {
     cancel: vi.fn(),
   };
 
-  spawnMock.mockResolvedValue(managedRun);
+  // Return a plain function (not a vi.fn mock) so TypeScript accepts it in mockImplementation()
+  const spawnMock = async (): Promise<unknown> => managedRun;
   return { spawnMock, mockReadFile };
 }
 

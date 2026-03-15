@@ -337,10 +337,6 @@ vi.mock("./rovo-dev-runner.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./rovo-dev-runner.js")>();
   return {
     ...actual,
-    buildRovoDevEnv: vi.fn().mockReturnValue({
-      USER_EMAIL: "mock@example.com",
-      USER_API_TOKEN: "mock-token",
-    }),
   };
 });
 
@@ -470,6 +466,104 @@ describe("T102: REFRESH_FAILED propagates as FailoverError(reason=auth_required,
     const fe = thrown as FailoverError;
     expect(fe.reason).toBe("auth_required");
     expect(fe.status).toBe(401);
+  });
+});
+
+// T115: buildRovoDevEnv is NOT called for rovo-dev runs
+// This test FAILS against the current code (buildRovoDevEnv IS called) and
+// PASSES after T117 removes the Object.assign(next, buildRovoDevEnv(...)) calls.
+describe("T115: buildRovoDevEnv is not called during rovo-dev runs", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    resolveRovoDevCredentialV2Spy.mockReset();
+    resolveRovoDevCredentialSpy.mockReset();
+    supervisorSpawnMock.mockReset();
+  });
+
+  it("does NOT call buildRovoDevEnv when tokenStore provides OAuth credentials", async () => {
+    const mockTokenStore = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      delete: vi.fn(),
+    };
+
+    resolveRovoDevCredentialV2Spy.mockResolvedValue({
+      credential: {
+        type: "oauth",
+        accessToken: "oauth-token-t115",
+        refreshToken: "oauth-refresh-t115",
+        site: "https://myorg.atlassian.net",
+        email: "user@myorg.com",
+        expiresAtMs: Date.now() + 300_000,
+      },
+    });
+
+    supervisorSpawnMock.mockResolvedValueOnce(
+      createManagedRun({
+        reason: "exit",
+        exitCode: 0,
+        exitSignal: null,
+        durationMs: 50,
+        stdout: "response from rovo",
+        stderr: "",
+        timedOut: false,
+        noOutputTimedOut: false,
+      }),
+    );
+
+    // The rovo-dev-runner module is mocked at the top of this file.
+    // After T118, buildRovoDevEnv is no longer exported — verify by checking
+    // whether the mock module namespace exposes it via Object.keys (safe — does
+    // not trigger vitest's proxy access guard for undefined exports).
+    const rovoDevRunnerMock = await import("./rovo-dev-runner.js");
+    const exportedKeys = Object.keys(rovoDevRunnerMock);
+
+    await runCliAgent({ ...ROVO_PARAMS, tokenStore: mockTokenStore });
+
+    // buildRovoDevEnv must not be present in the module exports
+    expect(
+      exportedKeys,
+      "buildRovoDevEnv should not be exported from rovo-dev-runner",
+    ).not.toContain("buildRovoDevEnv");
+  });
+
+  it("does NOT call buildRovoDevEnv when using V1 service-account fallback", async () => {
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_TOKEN", "env-token-t115");
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_SITE", "https://myorg.atlassian.net");
+    vi.stubEnv("OPENCLAW_LIVE_ROVODEV_EMAIL", "svc@myorg.com");
+
+    resolveRovoDevCredentialSpy.mockReturnValue({
+      type: "service-account",
+      accessToken: "env-token-t115",
+      site: "https://myorg.atlassian.net",
+      email: "svc@myorg.com",
+    });
+
+    supervisorSpawnMock.mockResolvedValueOnce(
+      createManagedRun({
+        reason: "exit",
+        exitCode: 0,
+        exitSignal: null,
+        durationMs: 50,
+        stdout: "ok from rovo",
+        stderr: "",
+        timedOut: false,
+        noOutputTimedOut: false,
+      }),
+    );
+
+    const rovoDevRunnerMock = await import("./rovo-dev-runner.js");
+    const exportedKeys = Object.keys(rovoDevRunnerMock);
+
+    // No tokenStore — V1 path
+    await runCliAgent({ ...ROVO_PARAMS });
+
+    // buildRovoDevEnv must not be present in the module exports
+    expect(
+      exportedKeys,
+      "buildRovoDevEnv should not be exported from rovo-dev-runner",
+    ).not.toContain("buildRovoDevEnv");
   });
 });
 

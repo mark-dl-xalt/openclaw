@@ -2,16 +2,22 @@
  * T050: Express router factory for Atlassian OAuth 2.1 PKCE login flow.
  *
  * Routes:
- *   GET  /           — Initiate OAuth (PKCE + redirect to Atlassian)
- *   GET  /callback   — OAuth callback (exchange code, create session)
- *   POST /signout    — Sign out (delete token, destroy session)
+ *   GET  /                   — Initiate OAuth (PKCE + redirect to Atlassian)
+ *   GET  /callback           — OAuth callback (exchange code, create session)
+ *   POST /signout            — Sign out (delete token, destroy session)
+ *   POST /rovo-token         — T123: Store ATAT token via acli rovodev auth login
+ *   GET  /rovo-status        — T124: Check acli rovodev auth status
+ *   GET  /atlassian-identity — T125: Fetch Atlassian user identity via REST API
  *
  * All configuration (clientId, redirectUri, scopes) is injected via opts
  * so the router is testable without environment variables.
  */
 
+import type { ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import express from "express";
+import { resolveRovoDevCredentialV2 } from "../agents/rovo-dev-auth.js";
 import {
   generateCodeVerifier,
   generateCodeChallenge,
@@ -26,6 +32,29 @@ import type { TokenStore } from "../auth/token-store.js";
 // ---------------------------------------------------------------------------
 
 const ATLASSIAN_AUTH_BASE = "https://auth.atlassian.com";
+const ATLASSIAN_API_BASE = "https://api.atlassian.com";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** Spawn function type — accepts vi.fn() mocks in tests by using a loose signature. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosened for test mock compat
+type SpawnFn = (command: string, args: string[], options: any) => any;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract email from acli status output.
+ * Looks for an email pattern anywhere in the output string.
+ */
+function extractEmailFromStatusOutput(output: string): string | null {
+  // Match standard email format
+  const match = output.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/u);
+  return match ? match[0] : null;
+}
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -39,9 +68,14 @@ export function createAuthRoutes(opts: {
   scopes: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosened for test mock compat
   fetchFn?: (...args: any[]) => Promise<any>;
+  /** Injected for testing — defaults to node:child_process.spawn */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosened for test mock compat (vi.fn())
+  spawnFn?: (...args: any[]) => any;
 }): express.Router {
   const { tokenStore, clientId, clientSecret, redirectUri, scopes } = opts;
   const fetchFn = opts.fetchFn ?? globalThis.fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SpawnFn loosened for test mock compat
+  const spawnFn: SpawnFn = (opts.spawnFn as any) ?? spawn;
 
   const router = express.Router();
 
@@ -111,14 +145,6 @@ export function createAuthRoutes(opts: {
       if (clientSecret) {
         tokenPayload.client_secret = clientSecret;
       }
-      console.log("[oauth-callback] token exchange request:", {
-        url: `${ATLASSIAN_AUTH_BASE}/oauth/token`,
-        client_id: clientId,
-        redirect_uri: redirectUri,
-        code_length: code?.length,
-        code_verifier_length: flowState.codeVerifier?.length,
-        has_client_secret: !!clientSecret,
-      });
       const tokenResponse = await fetchFn(`${ATLASSIAN_AUTH_BASE}/oauth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -156,9 +182,16 @@ export function createAuthRoutes(opts: {
       const session = (req as any).session;
       if (session) {
         session.userId = userIdentity.account_id;
+        session.email = userIdentity.email;
       }
 
-      res.redirect("/dashboard");
+      // T129: New users (no Rovo Dev connected yet) land on /connect-rovo.
+      // Returning users who already connected go straight to /dashboard.
+      if (session?.rovoConnected) {
+        res.redirect("/dashboard");
+      } else {
+        res.redirect("/connect-rovo");
+      }
     } catch (err) {
       console.error("[oauth-callback] error:", err);
       res.redirect("/login?reason=error");
@@ -197,6 +230,263 @@ export function createAuthRoutes(opts: {
       // Best-effort: still redirect even if token deletion fails.
       res.clearCookie("connect.sid");
       res.redirect("/login");
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /rovo-token — T123: Store ATAT token via acli rovodev auth login
+  // -------------------------------------------------------------------------
+  router.post("/rovo-token", async (req, res) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
+    const session = (req as any).session;
+    const userId: string | undefined = session?.userId;
+    const email: string | undefined = session?.email;
+
+    if (!userId) {
+      res.status(401).json({ error: "not_authenticated" });
+      return;
+    }
+
+    const atatToken: string | undefined = req.body?.atatToken;
+    if (!atatToken) {
+      res.status(400).json({ error: "missing_token" });
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      let stderr = "";
+      let proc: ChildProcess;
+
+      try {
+        proc = spawnFn("acli", ["rovodev", "auth", "login", "--email", email ?? "", "--token"], {
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+      } catch (err: unknown) {
+        const nodeErr = err as NodeJS.ErrnoException;
+        if (nodeErr.code === "ENOENT") {
+          res.status(503).json({ error: "acli_not_found" });
+          resolve();
+          return;
+        }
+        res.status(500).json({ error: "spawn_failed" });
+        resolve();
+        return;
+      }
+
+      // Write token to stdin (MUST NOT log the token value).
+      proc.stdin?.write(`${atatToken}\n`);
+      proc.stdin?.end();
+
+      // Collect stderr for error details (MUST NOT include the token).
+      proc.stderr?.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      // Timeout: 15 seconds.
+      const timeout = setTimeout(() => {
+        proc.kill("SIGTERM");
+        res.status(504).json({ error: "timeout" });
+        resolve();
+      }, 15_000);
+
+      proc.on("error", (err: NodeJS.ErrnoException) => {
+        clearTimeout(timeout);
+        if (err.code === "ENOENT") {
+          res.status(503).json({ error: "acli_not_found" });
+        } else {
+          res.status(500).json({ error: "spawn_failed" });
+        }
+        resolve();
+      });
+
+      proc.on("close", (code: number | null) => {
+        clearTimeout(timeout);
+        if (code === 0) {
+          // T127: set rovoConnected in session for fast-path status checks.
+          if (session) {
+            session.rovoConnected = true;
+          }
+          res.status(200).json({ connected: true });
+        } else {
+          // Return stderr as detail — MUST NOT include the ATAT token value.
+          res.status(400).json({ error: "login_failed", detail: stderr });
+        }
+        resolve();
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /rovo-status — T124: Check acli rovodev auth status
+  // -------------------------------------------------------------------------
+  router.get("/rovo-status", async (req, res) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
+    const session = (req as any).session;
+    const userId: string | undefined = session?.userId;
+
+    if (!userId) {
+      res.status(401).json({ error: "not_authenticated" });
+      return;
+    }
+
+    // T127: fast-path — if session says connected, skip subprocess.
+    if (session?.rovoConnected === true) {
+      // Still report as connected; include email from session if available.
+      const sessionEmail: string | undefined = session.email;
+      res.status(200).json({ connected: true, ...(sessionEmail ? { email: sessionEmail } : {}) });
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      let stdout = "";
+      let proc: ChildProcess;
+
+      try {
+        proc = spawnFn("acli", ["rovodev", "auth", "status"], {
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      } catch (err: unknown) {
+        const nodeErr = err as NodeJS.ErrnoException;
+        if (nodeErr.code === "ENOENT") {
+          res.status(200).json({ connected: false, error: "acli_not_found" });
+          resolve();
+          return;
+        }
+        res.status(200).json({ connected: false });
+        resolve();
+        return;
+      }
+
+      proc.stdout?.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      // Timeout: 10 seconds.
+      const timeout = setTimeout(() => {
+        proc.kill("SIGTERM");
+        res.status(200).json({ connected: false });
+        resolve();
+      }, 10_000);
+
+      proc.on("error", (err: NodeJS.ErrnoException) => {
+        clearTimeout(timeout);
+        if (err.code === "ENOENT") {
+          res.status(200).json({ connected: false, error: "acli_not_found" });
+        } else {
+          res.status(200).json({ connected: false });
+        }
+        resolve();
+      });
+
+      proc.on("close", (code: number | null) => {
+        clearTimeout(timeout);
+        const outputLower = stdout.toLowerCase();
+
+        // "not logged in" / "not authenticated" → not connected.
+        if (outputLower.includes("not logged in") || outputLower.includes("not authenticated")) {
+          res.status(200).json({ connected: false });
+          resolve();
+          return;
+        }
+
+        if (code === 0) {
+          const email = extractEmailFromStatusOutput(stdout);
+          if (email) {
+            // T127: persist email in session for future fast-path calls.
+            if (session) {
+              session.email = email;
+              session.rovoConnected = true;
+            }
+            res.status(200).json({ connected: true, email });
+          } else {
+            res.status(200).json({ connected: true });
+          }
+        } else {
+          res.status(200).json({ connected: false });
+        }
+        resolve();
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /atlassian-identity — T125: Fetch Atlassian user identity via REST API
+  // -------------------------------------------------------------------------
+  router.get("/atlassian-identity", async (req, res) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
+    const session = (req as any).session;
+    const userId: string | undefined = session?.userId;
+
+    if (!userId) {
+      res.status(401).json({ error: "not_authenticated" });
+      return;
+    }
+
+    try {
+      // Resolve credential (handles near-expiry refresh via resolveRovoDevCredentialV2).
+      // Pass fetchFn so token refresh uses the same injected fetch (enables testing).
+      const result = await resolveRovoDevCredentialV2({ tokenStore, userId, fetchFn });
+
+      if (result.credential === null) {
+        res.status(401).json({ error: "not_authenticated" });
+        return;
+      }
+
+      const accessToken = result.credential.accessToken;
+
+      // Fetch user identity from /me.
+      const meResponse = await fetchFn(`${ATLASSIAN_API_BASE}/me`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!meResponse.ok) {
+        console.error("[atlassian-identity] /me failed:", meResponse.status);
+        res.status(502).json({ error: "upstream_error" });
+        return;
+      }
+
+      const meData = await meResponse.json();
+
+      // Fetch accessible resources (sites).
+      const resourcesResponse = await fetchFn(
+        `${ATLASSIAN_API_BASE}/oauth/token/accessible-resources`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
+
+      if (!resourcesResponse.ok) {
+        console.error(
+          "[atlassian-identity] accessible-resources failed:",
+          resourcesResponse.status,
+        );
+        res.status(502).json({ error: "upstream_error" });
+        return;
+      }
+
+      const resourcesData = await resourcesResponse.json();
+
+      // Normalise: Atlassian uses snake_case in some versions, camelCase in others.
+      const displayName: string = meData.display_name ?? meData.displayName ?? meData.name ?? "";
+      const email: string = meData.email ?? "";
+      const accountId: string = meData.account_id ?? meData.accountId ?? "";
+
+      // Map accessible resources to a consistent shape.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- upstream shape varies
+      const accessibleResources = (Array.isArray(resourcesData) ? resourcesData : []).map(
+        (r: any) => ({
+          id: r.id,
+          name: r.name,
+          url: r.url,
+        }),
+      );
+
+      res.status(200).json({ displayName, email, accountId, accessibleResources });
+    } catch (err) {
+      console.error("[atlassian-identity] error:", err);
+      res.status(502).json({ error: "upstream_error" });
     }
   });
 

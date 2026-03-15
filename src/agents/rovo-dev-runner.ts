@@ -10,7 +10,6 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { getProcessSupervisor } from "../process/supervisor/index.js";
-import type { RovoDevCredential } from "./rovo-dev-auth.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,26 +49,9 @@ export type RunRovoDevParams = {
   workspaceDir: string;
   timeoutMs: number;
   runId: string;
-  /** Optional credential (injected env vars). */
-  credential?: RovoDevCredential;
   /** Additional env vars to inject into the subprocess. */
   env?: Record<string, string>;
 };
-
-// ---------------------------------------------------------------------------
-// buildRovoDevEnv (T025)
-// ---------------------------------------------------------------------------
-
-/**
- * Builds the env var object to inject into the acli subprocess.
- * `USER_EMAIL` and `USER_API_TOKEN` are the env vars acli reads.
- */
-export function buildRovoDevEnv(credential: RovoDevCredential): Record<string, string> {
-  return {
-    USER_EMAIL: credential.email,
-    USER_API_TOKEN: credential.accessToken,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // runRovoDev
@@ -89,15 +71,13 @@ export function buildRovoDevEnv(credential: RovoDevCredential): Record<string, s
  * Throws a RovoDevError with an appropriate `.code` on failure.
  */
 export async function runRovoDev(params: RunRovoDevParams): Promise<RovoDevOutput> {
-  const { prompt, sessionId, workspaceDir, timeoutMs, runId, credential, env: extraEnv } = params;
+  const { prompt, sessionId, workspaceDir, timeoutMs, runId, env: extraEnv } = params;
 
   const supervisor = getProcessSupervisor();
 
-  // Build the env to inject
-  const credentialEnv = credential ? buildRovoDevEnv(credential) : {};
+  // acli authenticates via macOS keychain (ATAT tokens) — no env var injection needed.
   const spawnEnv: NodeJS.ProcessEnv = {
     ...process.env,
-    ...credentialEnv,
     ...extraEnv,
   };
 

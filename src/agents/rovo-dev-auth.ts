@@ -131,6 +131,9 @@ export async function resolveRovoDevCredentialV2(opts: {
     delete: (userId: string) => Promise<void>;
   };
   userId?: string;
+  /** Optional fetch implementation for token refresh (for testing). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loosened for test mock compat
+  fetchFn?: (...args: any[]) => Promise<any>;
 }): Promise<CredentialResult> {
   const userId = opts.userId ?? "default";
   const stored = await opts.tokenStore.get(userId);
@@ -145,7 +148,9 @@ export async function resolveRovoDevCredentialV2(opts: {
 
   if (isNearExpiry) {
     try {
-      const refreshed = await refreshOAuthToken(stored.refreshToken);
+      const refreshed = opts.fetchFn
+        ? await refreshOAuthToken(stored.refreshToken, opts.fetchFn as typeof globalThis.fetch)
+        : await refreshOAuthToken(stored.refreshToken);
 
       // Map snake_case Atlassian response to camelCase internal model.
       const newAccessToken = refreshed.access_token;

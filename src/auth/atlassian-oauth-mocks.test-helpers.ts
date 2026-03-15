@@ -5,7 +5,6 @@
  * login flow without hitting Atlassian servers.
  */
 import { randomBytes, randomUUID } from "node:crypto";
-import { vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Types (self-contained — no imports from unwritten files)
@@ -85,8 +84,19 @@ export function createExpiredOAuthFlowState(): OAuthFlowState {
 // HTTP endpoint mocks (vi.fn()-based, no msw dependency)
 // ---------------------------------------------------------------------------
 
+/** Mock fetch response shape (subset of Response for testing) */
+export interface MockFetchResponse {
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+  text: () => Promise<string>;
+}
+
+/** Type for mock fetch functions that can be passed to mockImplementation() */
+export type MockFetchFn = (...args: unknown[]) => Promise<MockFetchResponse>;
+
 /**
- * Returns a `vi.fn()` that mimics `fetch()` for the Atlassian token endpoint
+ * Returns a function that mimics `fetch()` for the Atlassian token endpoint
  * (`POST https://auth.atlassian.com/oauth/token`).
  *
  * The mock resolves with a `Response`-like object whose `.json()` returns
@@ -95,9 +105,9 @@ export function createExpiredOAuthFlowState(): OAuthFlowState {
 export function createMockAtlassianTokenEndpoint(
   response?: AtlassianTokenResponse | null,
   statusCode = 200,
-) {
+): MockFetchFn {
   const body = response ?? createMockTokenResponse();
-  return vi.fn().mockResolvedValue({
+  return async (): Promise<MockFetchResponse> => ({
     ok: statusCode >= 200 && statusCode < 300,
     status: statusCode,
     json: async () => body,
@@ -106,15 +116,15 @@ export function createMockAtlassianTokenEndpoint(
 }
 
 /**
- * Returns a `vi.fn()` that mimics `fetch()` for the Atlassian user identity
+ * Returns a function that mimics `fetch()` for the Atlassian user identity
  * endpoint (`GET https://api.atlassian.com/me`).
  */
 export function createMockAtlassianUserEndpoint(
   response?: AtlassianUserIdentity | null,
   statusCode = 200,
-) {
+): MockFetchFn {
   const body = response ?? createMockUserIdentity();
-  return vi.fn().mockResolvedValue({
+  return async (): Promise<MockFetchResponse> => ({
     ok: statusCode >= 200 && statusCode < 300,
     status: statusCode,
     json: async () => body,
@@ -123,9 +133,13 @@ export function createMockAtlassianUserEndpoint(
 }
 
 /**
- * Returns a `vi.fn()` that rejects, simulating a network error when calling
+ * Returns a function that rejects, simulating a network error when calling
  * the Atlassian token endpoint.
  */
-export function createFailingTokenEndpoint(errorMessage = "Network error") {
-  return vi.fn().mockRejectedValue(new Error(errorMessage));
+export function createFailingTokenEndpoint(
+  errorMessage = "Network error",
+): (...args: unknown[]) => Promise<never> {
+  return async (): Promise<never> => {
+    throw new Error(errorMessage);
+  };
 }

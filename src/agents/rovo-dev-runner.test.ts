@@ -1,8 +1,5 @@
 /**
  * T017-T018: Tests for runRovoDev() runner.
- *
- * These tests import from files that do not exist yet.
- * They MUST fail until the implementation is written.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockAcliSpawn } from "./rovo-dev-mock.test-helpers.js";
