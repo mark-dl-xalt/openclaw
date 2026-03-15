@@ -17,7 +17,14 @@ import { createTokenStore } from "../auth/token-store.js";
 import { createAuthRoutes } from "../routes/auth-atlassian-routes.js";
 
 // Paths this stage handles (checked before delegating to Express).
-const OAUTH_PATHS = new Set(["/login", "/auth/signout", "/connect-rovo", "/dashboard"]);
+const OAUTH_PATHS = new Set([
+  "/login",
+  "/auth/signout",
+  "/connect-rovo",
+  "/dashboard",
+  "/test-session",
+  "/test-session-check",
+]);
 const OAUTH_PREFIX = "/auth/atlassian";
 
 /**
@@ -59,6 +66,23 @@ export async function createOAuthStageHandler(): Promise<{
       },
     }),
   );
+
+  // Diagnostic: test session cookie setting (temporary — remove after debugging).
+  app.get("/test-session", (req, res) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
+    const session = req.session as Record<string, unknown>;
+    session.test = "hello";
+    res.json({ set: true, sessionID: (req as unknown as Record<string, unknown>).sessionID });
+  });
+  app.get("/test-session-check", (req, res) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
+    const session = req.session as Record<string, unknown>;
+    res.json({
+      test: session.test ?? "(not set)",
+      sessionID: (req as unknown as Record<string, unknown>).sessionID,
+      cookies: req.headers.cookie ?? "(none)",
+    });
+  });
 
   // Login page.
   app.get("/login", (req, res) => {
