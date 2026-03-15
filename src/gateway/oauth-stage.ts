@@ -72,6 +72,16 @@ export async function createOAuthStageHandler(): Promise<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
     const session = req.session as Record<string, unknown>;
     session.test = "hello";
+    // Manual cookie test — does setHeader work at all on this response?
+    res.setHeader("Set-Cookie", "manual-test=works; Path=/");
+    console.log(
+      "[test-session] res.end hooked?",
+      res.end.name,
+      "res type:",
+      res.constructor.name,
+      "headersSent:",
+      res.headersSent,
+    );
     res.json({ set: true, sessionID: (req as unknown as Record<string, unknown>).sessionID });
   });
   app.get("/test-session-check", (req, res) => {
