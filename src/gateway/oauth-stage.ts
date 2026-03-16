@@ -2,7 +2,7 @@
  * T052: Gateway request stage for Atlassian OAuth routes.
  *
  * Wraps the Express-based OAuth router into a gateway pipeline stage.
- * Handles: /login, /auth/atlassian, /auth/atlassian/callback, /auth/signout,
+ * Handles: /, /login, /auth/atlassian, /auth/atlassian/callback, /auth/signout,
  *          /auth/atlassian/rovo-token, /auth/atlassian/rovo-status,
  *          /auth/atlassian/atlassian-identity,
  *          /connect-rovo (T128), /dashboard (T130)
@@ -17,7 +17,7 @@ import { createTokenStore } from "../auth/token-store.js";
 import { createAuthRoutes } from "../routes/auth-atlassian-routes.js";
 
 // Paths this stage handles (checked before delegating to Express).
-const OAUTH_PATHS = new Set(["/login", "/auth/signout", "/connect-rovo", "/dashboard"]);
+const OAUTH_PATHS = new Set(["/", "/login", "/auth/signout", "/connect-rovo", "/dashboard"]);
 const OAUTH_PREFIX = "/auth/atlassian";
 
 /**
@@ -62,6 +62,13 @@ export async function createOAuthStageHandler(): Promise<{
       },
     }),
   );
+
+  // Root redirect — authenticated users go to dashboard, others to login.
+  app.get("/", (req, res) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
+    const dest = (req.session as any)?.userId ? "/dashboard" : "/login";
+    res.redirect(dest);
+  });
 
   // Login page.
   app.get("/login", (req, res) => {
