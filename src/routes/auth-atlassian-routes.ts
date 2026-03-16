@@ -98,7 +98,6 @@ export function createAuthRoutes(opts: {
       state,
       code_challenge: codeChallenge,
       code_challenge_method: "S256",
-      prompt: "consent",
     });
 
     res.redirect(`${ATLASSIAN_AUTH_BASE}/authorize?${params.toString()}`);
