@@ -5,7 +5,7 @@
  * exchange, token refresh, user identity fetching, and in-memory flow
  * state management. Uses native `fetch()` (Node 18+) and `node:crypto`.
  *
- * This is a public-client PKCE flow — no `client_secret` is used.
+ * Uses PKCE with `client_secret` (required by Atlassian for token exchange/refresh).
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -134,16 +134,23 @@ export async function exchangeCodeForToken(
 
   const redirectUri = process.env.ATLASSIAN_OAUTH_REDIRECT_URI || DEFAULT_REDIRECT_URI;
 
+  // Atlassian requires form-urlencoded (not JSON) and client_secret.
+  const payload: Record<string, string> = {
+    grant_type: "authorization_code",
+    client_id: clientId,
+    code,
+    redirect_uri: redirectUri,
+    code_verifier: codeVerifier,
+  };
+  const clientSecret = process.env.ATLASSIAN_OAUTH_CLIENT_SECRET;
+  if (clientSecret) {
+    payload.client_secret = clientSecret;
+  }
+
   const response = await fetchFn(`${ATLASSIAN_AUTH_BASE}/oauth/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "authorization_code",
-      client_id: clientId,
-      code,
-      redirect_uri: redirectUri,
-      code_verifier: codeVerifier,
-    }),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(payload).toString(),
   });
 
   if (!response.ok) {
@@ -176,14 +183,21 @@ export async function refreshOAuthToken(
     throw new Error("ATLASSIAN_OAUTH_CLIENT_ID environment variable is not set");
   }
 
+  // Atlassian requires form-urlencoded (not JSON) and client_secret for refresh.
+  const payload: Record<string, string> = {
+    grant_type: "refresh_token",
+    client_id: clientId,
+    refresh_token: refreshToken,
+  };
+  const clientSecret = process.env.ATLASSIAN_OAUTH_CLIENT_SECRET;
+  if (clientSecret) {
+    payload.client_secret = clientSecret;
+  }
+
   const response = await fetchFn(`${ATLASSIAN_AUTH_BASE}/oauth/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "refresh_token",
-      client_id: clientId,
-      refresh_token: refreshToken,
-    }),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(payload).toString(),
   });
 
   if (!response.ok) {
