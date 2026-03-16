@@ -7,6 +7,7 @@ import {
   resolveConfiguredModelRef,
   resolveHooksGmailModel,
 } from "../agents/model-selection.js";
+import { registerRovoDevStatusHook } from "../agents/rovo-dev-status-hook.js";
 import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
 import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
 import type { CliDeps } from "../cli/deps.js";
@@ -118,6 +119,9 @@ export async function startGatewaySidecars(params: {
         `loaded ${loadedCount} internal hook handler${loadedCount > 1 ? "s" : ""}`,
       );
     }
+    // Register Rovo Dev status injection hook unconditionally — it injects
+    // acli connection status into the atlas agent's system prompt per turn.
+    registerRovoDevStatusHook();
   } catch (err) {
     params.logHooks.error(`failed to load hooks: ${String(err)}`);
   }
