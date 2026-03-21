@@ -241,6 +241,14 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     profiles: [],
     includeInOpenClawGroup: true,
   },
+  {
+    id: "atlassian_api",
+    label: "atlassian_api",
+    description: "Atlassian REST API (Jira, Confluence)",
+    sectionId: "web",
+    profiles: [],
+    includeInOpenClawGroup: true,
+  },
 ];
 
 const CORE_TOOL_BY_ID = new Map<string, CoreToolDefinition>(
