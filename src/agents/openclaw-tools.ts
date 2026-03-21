@@ -7,7 +7,7 @@ import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { SpawnedToolContext } from "./spawned-context.js";
 import type { ToolFsPolicy } from "./tool-fs-policy.js";
 import { createAgentsListTool } from "./tools/agents-list-tool.js";
-import { createAtlassianApiTool } from "./tools/atlassian-api-tool.js";
+// atlassian_api tool now provided by atlas-lobster plugin
 import { createBrowserTool } from "./tools/browser-tool.js";
 import { createCanvasTool } from "./tools/canvas-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
@@ -217,8 +217,8 @@ export function createOpenClawTools(
     ...(pdfTool ? [pdfTool] : []),
   ];
 
-  // Atlassian API tool — uses stored OAuth token from /login flow.
-  tools.push(createAtlassianApiTool());
+  // Atlassian API tool — now provided by the atlas-lobster plugin.
+  // Removed from core to avoid duplicate name blocking the plugin version.
 
   const pluginTools = resolvePluginTools({
     context: {
