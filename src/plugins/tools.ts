@@ -100,6 +100,9 @@ export function resolvePluginTools(params: {
     if (!resolved) {
       continue;
     }
+    log.info(
+      `[plugin-tools-debug] plugin=${entry.pluginId} names=[${(entry.names ?? []).join(",")}] optional=${entry.optional} resolved=${Array.isArray(resolved) ? resolved.length : 1} tool(s)`,
+    );
     const listRaw = Array.isArray(resolved) ? resolved : [resolved];
     const list = entry.optional
       ? listRaw.filter((tool) =>
@@ -110,6 +113,9 @@ export function resolvePluginTools(params: {
           }),
         )
       : listRaw;
+    log.info(
+      `[plugin-tools-debug] plugin=${entry.pluginId} after-optional-filter: ${list.length}/${listRaw.length} tools survived (allowlist size=${allowlist.size}, entries=[${Array.from(allowlist).join(",")}])`,
+    );
     if (list.length === 0) {
       continue;
     }
@@ -117,6 +123,9 @@ export function resolvePluginTools(params: {
     for (const tool of list) {
       if (nameSet.has(tool.name) || existing.has(tool.name)) {
         const message = `plugin tool name conflict (${entry.pluginId}): ${tool.name}`;
+        log.info(
+          `[plugin-tools-debug] NAME CONFLICT: tool="${tool.name}" existingNames=[${Array.from(existing).slice(0, 10).join(",")}...]`,
+        );
         if (!params.suppressNameConflicts) {
           log.error(message);
           registry.diagnostics.push({
