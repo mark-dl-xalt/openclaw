@@ -15,6 +15,7 @@ import session from "express-session";
 import type { TokenStore } from "../auth/token-store.js";
 import { createTokenStore } from "../auth/token-store.js";
 import { createAuthRoutes } from "../routes/auth-atlassian-routes.js";
+import { renderLoginPage } from "./login-page.js";
 
 // Paths this stage handles (checked before delegating to Express).
 const OAUTH_PATHS = new Set(["/", "/login", "/auth/signout", "/connect-rovo", "/dashboard"]);
@@ -80,23 +81,13 @@ export async function createOAuthStageHandler(): Promise<{
     const reason = req.query.reason as string | undefined;
     let message = "";
     if (reason === "session_expired") {
-      message = "<p>Your session has expired. Please sign in again.</p>";
+      message = "Your session has expired. Please sign in again.";
     } else if (reason === "access_denied") {
-      message = "<p>Sign-in was not completed. Please try again.</p>";
+      message = "Sign-in was not completed. Please try again.";
     } else if (reason === "error") {
-      message = "<p>An error occurred. Please try again.</p>";
+      message = "An error occurred. Please try again.";
     }
-    res.status(200).send(`<!DOCTYPE html>
-<html><head><title>Sign In — Atlas-Lobster</title></head>
-<body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
-  <div style="text-align:center;max-width:400px">
-    <h1>Atlas-Lobster</h1>
-    ${message}
-    <a href="/auth/atlassian" style="display:inline-block;padding:12px 24px;background:#0052CC;color:#fff;border-radius:4px;text-decoration:none;font-size:16px">
-      Sign in with Atlassian
-    </a>
-  </div>
-</body></html>`);
+    res.status(200).send(renderLoginPage(message));
   });
 
   // OAuth routes.
