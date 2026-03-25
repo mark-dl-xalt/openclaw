@@ -336,7 +336,7 @@ export function renderIntegrationsPage(): string {
 <div class="flex justify-between items-start mb-8">
 <div>
 <h2 class="text-2xl font-headline font-extrabold text-on-surface mb-2">Rovo Dev</h2>
-<p class="text-on-surface-variant">Connect your Rovo Dev token to enable AI-powered Jira and Confluence context in chat.</p>
+<p class="text-on-surface-variant">Rovo Dev connects to your Atlassian Teamwork Graph — giving your AI real access to Jira issues, Confluence docs, and Bitbucket repos. It doesn't just read ticket titles. It understands project relationships, sprint context, and cross-team dependencies.</p>
 </div>
 <!-- rovo-status-badge: updated by fetchRovoStatus() -->
 <span id="rovo-status-badge" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-surface-container text-on-surface-variant"></span>
@@ -396,25 +396,40 @@ export function renderIntegrationsPage(): string {
     </div>
   </div>
 </div>
-<!-- Capabilities — Coming Soon cards (plan.md P2-8) -->
+<!-- Capabilities — connected-state cards -->
 <div class="p-6 bg-surface-container-low rounded-xl space-y-6">
 <h3 class="text-sm font-bold text-on-surface uppercase tracking-wider mb-2">Capabilities</h3>
+<!-- Active: Use for coding tasks — locked on, non-interactive -->
+<div class="flex items-start gap-4 cursor-default" aria-label="Use for coding tasks — active by default">
+  <div class="flex-shrink-0 mt-0.5">
+    <span class="material-symbols-outlined text-primary" style="font-size:1.25rem;font-variation-settings:'FILL' 1">check_circle</span>
+  </div>
+  <div class="flex-1">
+    <div class="flex items-center gap-2 mb-0.5">
+      <span class="block font-bold text-on-surface">Use for coding tasks</span>
+      <span class="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary-fixed px-2 py-0.5 rounded-full">Active</span>
+    </div>
+    <span class="block text-sm text-on-surface-variant">Coding tasks that touch your Jira, Confluence, or Bitbucket are automatically delegated to Rovo Dev. It works with your live project data — real tickets, real docs, real repos.</span>
+  </div>
+</div>
+<!-- Coming Soon: Automated Code Review -->
 <div class="flex items-start gap-4 opacity-60 pointer-events-none cursor-not-allowed" aria-disabled="true">
   <div class="flex-1">
     <div class="flex items-center gap-2 mb-0.5">
       <span class="block font-bold text-on-surface">Automated Code Review</span>
       <span class="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary-fixed px-2 py-0.5 rounded-full">Soon</span>
     </div>
-    <span class="block text-sm text-on-surface-variant">Automatically trigger AI reviews on newly created pull requests in Bitbucket.</span>
+    <span class="block text-sm text-on-surface-variant">AI-powered reviews on pull requests in Bitbucket — catching issues before your team does.</span>
   </div>
 </div>
+<!-- Coming Soon: Proactive Jira Summaries -->
 <div class="flex items-start gap-4 opacity-60 pointer-events-none cursor-not-allowed" aria-disabled="true">
   <div class="flex-1">
     <div class="flex items-center gap-2 mb-0.5">
       <span class="block font-bold text-on-surface">Proactive Jira Summaries</span>
       <span class="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary-fixed px-2 py-0.5 rounded-full">Soon</span>
     </div>
-    <span class="block text-sm text-on-surface-variant">Receive AI-generated summaries of active sprint progress directly in chat.</span>
+    <span class="block text-sm text-on-surface-variant">Daily sprint progress summaries delivered to your chat — powered by real Jira data.</span>
   </div>
 </div>
 </div>
@@ -455,25 +470,40 @@ export function renderIntegrationsPage(): string {
 <!-- atat-error: hidden by default, shown on token submission failure -->
 <p id="atat-error" class="hidden mt-2 text-sm text-error"></p>
 </div>
-<!-- Capabilities — Coming Soon cards (plan.md P2-8) -->
+<!-- Capabilities — disconnected-state cards -->
 <div class="p-6 bg-surface-container-low rounded-xl space-y-6">
 <h3 class="text-sm font-bold text-on-surface uppercase tracking-wider mb-2">Capabilities</h3>
+<!-- Active: Use for coding tasks — locked on, non-interactive -->
+<div class="flex items-start gap-4 cursor-default" aria-label="Use for coding tasks — active by default">
+  <div class="flex-shrink-0 mt-0.5">
+    <span class="material-symbols-outlined text-primary" style="font-size:1.25rem;font-variation-settings:'FILL' 1">check_circle</span>
+  </div>
+  <div class="flex-1">
+    <div class="flex items-center gap-2 mb-0.5">
+      <span class="block font-bold text-on-surface">Use for coding tasks</span>
+      <span class="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary-fixed px-2 py-0.5 rounded-full">Active</span>
+    </div>
+    <span class="block text-sm text-on-surface-variant">Coding tasks that touch your Jira, Confluence, or Bitbucket are automatically delegated to Rovo Dev. It works with your live project data — real tickets, real docs, real repos.</span>
+  </div>
+</div>
+<!-- Coming Soon: Automated Code Review -->
 <div class="flex items-start gap-4 opacity-60 pointer-events-none cursor-not-allowed" aria-disabled="true">
   <div class="flex-1">
     <div class="flex items-center gap-2 mb-0.5">
       <span class="block font-bold text-on-surface">Automated Code Review</span>
       <span class="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary-fixed px-2 py-0.5 rounded-full">Soon</span>
     </div>
-    <span class="block text-sm text-on-surface-variant">Automatically trigger AI reviews on newly created pull requests in Bitbucket.</span>
+    <span class="block text-sm text-on-surface-variant">AI-powered reviews on pull requests in Bitbucket — catching issues before your team does.</span>
   </div>
 </div>
+<!-- Coming Soon: Proactive Jira Summaries -->
 <div class="flex items-start gap-4 opacity-60 pointer-events-none cursor-not-allowed" aria-disabled="true">
   <div class="flex-1">
     <div class="flex items-center gap-2 mb-0.5">
       <span class="block font-bold text-on-surface">Proactive Jira Summaries</span>
       <span class="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary-fixed px-2 py-0.5 rounded-full">Soon</span>
     </div>
-    <span class="block text-sm text-on-surface-variant">Receive AI-generated summaries of active sprint progress directly in chat.</span>
+    <span class="block text-sm text-on-surface-variant">Daily sprint progress summaries delivered to your chat — powered by real Jira data.</span>
   </div>
 </div>
 </div>
