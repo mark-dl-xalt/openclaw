@@ -186,9 +186,9 @@ export function createAuthRoutes(opts: {
         session.displayName = userIdentity.name;
       }
 
-      // T129: New users (no Rovo Dev connected yet) land on /connect-rovo.
-      // Returning users who already connected go straight to /dashboard.
-      const redirectTarget = session?.rovoConnected ? "/dashboard" : "/connect-rovo";
+      // T021: All users (new and returning) land on /integrations after OAuth.
+      // The integrations page handles both states dynamically via GET /auth/atlassian/rovo-status.
+      const redirectTarget = "/integrations";
 
       if (session?.save) {
         session.save((err: Error | null) => {

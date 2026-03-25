@@ -133,8 +133,8 @@ describe("GET /auth/atlassian/callback (T042)", () => {
   });
 
   // (a) Valid state + code -> token stored, session created.
-  //     T129: new users (rovoConnected absent) redirect to /connect-rovo.
-  it("valid state + code -> stores token, creates session, redirects to /connect-rovo (new user)", async () => {
+  //     T021: all users (new and returning) redirect to /integrations.
+  it("valid state + code -> stores token, creates session, redirects to /integrations (new user)", async () => {
     const mockTokenResponse = createMockTokenResponse();
     const mockUser = createMockUserIdentity();
     const fetchMock = vi
@@ -163,18 +163,19 @@ describe("GET /auth/atlassian/callback (T042)", () => {
     const cookies = initRes.headers["set-cookie"];
 
     // Now simulate callback with the same state.
-    // New user: session.rovoConnected is absent, so redirect goes to /connect-rovo.
+    // T021: all users redirect to /integrations after OAuth.
     const callbackRes = await request(app)
       .get(`/auth/atlassian/callback?code=test-auth-code&state=${state}`)
       .set("Cookie", cookies ?? []);
 
     expect(callbackRes.status).toBe(302);
-    expect(callbackRes.headers.location).toBe("/connect-rovo");
+    expect(callbackRes.headers.location).toBe("/integrations");
     expect(tokenStore.set).toHaveBeenCalled();
   });
 
-  // (a2) Valid state + code, returning user (rovoConnected=true) -> redirect to /dashboard.
-  it("valid state + code, rovoConnected session -> redirects to /dashboard (returning user)", async () => {
+  // (a2) Valid state + code, returning user (rovoConnected=true) -> redirect to /integrations.
+  //      T021: returning users also land on /integrations (page handles both states dynamically).
+  it("valid state + code, rovoConnected session -> redirects to /integrations (returning user)", async () => {
     const mockTokenResponse = createMockTokenResponse();
     const mockUser = createMockUserIdentity();
     const fetchMock = vi
@@ -219,7 +220,7 @@ describe("GET /auth/atlassian/callback (T042)", () => {
       .set("Cookie", cookies ?? []);
 
     expect(callbackRes.status).toBe(302);
-    expect(callbackRes.headers.location).toBe("/dashboard");
+    expect(callbackRes.headers.location).toBe("/integrations");
   });
 
   // (b) Expired state (>600s) -> redirect to /login?reason=error

@@ -5,7 +5,8 @@
  * Handles: /, /login, /auth/atlassian, /auth/atlassian/callback, /auth/signout,
  *          /auth/atlassian/rovo-token, /auth/atlassian/rovo-status,
  *          /auth/atlassian/atlassian-identity,
- *          /connect-rovo (T128), /dashboard (T130)
+ *          /connect-rovo (T128, retired — redirects to /integrations),
+ *          /dashboard (T130), /integrations (T021)
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -15,10 +16,19 @@ import session from "express-session";
 import type { TokenStore } from "../auth/token-store.js";
 import { createTokenStore } from "../auth/token-store.js";
 import { createAuthRoutes } from "../routes/auth-atlassian-routes.js";
+import { renderIntegrationsPage } from "./integrations-page.js";
 import { renderLoginPage } from "./login-page.js";
 
 // Paths this stage handles (checked before delegating to Express).
-const OAUTH_PATHS = new Set(["/", "/login", "/auth/signout", "/connect-rovo", "/dashboard"]);
+// T021: /integrations added as post-login landing page; /connect-rovo retired (redirects to /integrations).
+const OAUTH_PATHS = new Set([
+  "/",
+  "/login",
+  "/auth/signout",
+  "/dashboard",
+  "/integrations",
+  "/connect-rovo",
+]);
 const OAUTH_PREFIX = "/auth/atlassian";
 
 /**
@@ -102,7 +112,20 @@ export async function createOAuthStageHandler(): Promise<{
   app.use("/auth/atlassian", authRouter);
 
   // -------------------------------------------------------------------------
-  // GET /connect-rovo — T128: Atlassian identity + Rovo Dev opt-in page
+  // GET /integrations — T021/T022: Post-login integrations page.
+  // -------------------------------------------------------------------------
+  app.get("/integrations", (req, res) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
+    const session = req.session as any;
+    if (!session?.userId) {
+      res.redirect("/login");
+      return;
+    }
+    res.status(200).send(renderIntegrationsPage());
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /connect-rovo — T128: RETIRED. Redirects to /integrations (T021).
   // -------------------------------------------------------------------------
   app.get("/connect-rovo", (req, res) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- express-session augments req
@@ -111,177 +134,8 @@ export async function createOAuthStageHandler(): Promise<{
       res.redirect("/login");
       return;
     }
-    res.status(200).send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Connect Atlassian — Atlas-Lobster</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; background: #f4f5f7; color: #172b4d; }
-    h1 { font-size: 1.5rem; margin: 0 0 24px; }
-    .panels { display: flex; gap: 24px; flex-wrap: wrap; }
-    .panel { flex: 1; min-width: 280px; background: #fff; border: 1px solid #dfe1e6; border-radius: 8px; padding: 24px; }
-    .panel h2 { font-size: 1.1rem; margin: 0 0 16px; }
-    .identity-row { margin: 8px 0; }
-    .identity-label { font-size: 0.8rem; color: #6b778c; text-transform: uppercase; letter-spacing: 0.04em; }
-    .identity-value { font-size: 1rem; font-weight: 500; }
-    .sites-list { list-style: none; padding: 0; margin: 8px 0 0; }
-    .sites-list li { padding: 6px 0; border-bottom: 1px solid #f4f5f7; font-size: 0.95rem; }
-    .sites-list li:last-child { border-bottom: none; }
-    .loading { color: #6b778c; font-style: italic; }
-    .error-msg { color: #de350b; background: #ffebe6; border: 1px solid #ff8f73; border-radius: 4px; padding: 12px; margin-top: 12px; display: none; }
-    .form-group { margin-bottom: 16px; }
-    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
-    input[type="password"] { width: 100%; padding: 8px 12px; border: 2px solid #dfe1e6; border-radius: 4px; font-size: 1rem; }
-    input[type="password"]:focus { outline: none; border-color: #0052cc; }
-    .btn-primary { display: inline-block; padding: 10px 20px; background: #0052cc; color: #fff; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
-    .btn-primary:hover { background: #0065ff; }
-    .btn-primary:disabled { background: #b3d4ff; cursor: not-allowed; }
-    .skip-link { margin-left: 16px; color: #0052cc; text-decoration: none; font-size: 0.95rem; }
-    .skip-link:hover { text-decoration: underline; }
-    .optional-badge { display: inline-block; background: #e3fcef; color: #006644; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; font-weight: 600; margin-left: 8px; vertical-align: middle; }
-    .instruction { font-size: 0.9rem; color: #42526e; margin-bottom: 16px; line-height: 1.5; }
-    .connected-badge { display: inline-block; background: #e3fcef; color: #006644; border: 1px solid #57d9a3; border-radius: 4px; padding: 4px 10px; font-size: 0.85rem; font-weight: 600; margin-bottom: 12px; }
-  </style>
-</head>
-<body>
-  <h1>Atlas-Lobster — Connect Atlassian</h1>
-  <div class="panels">
-    <!-- Panel 1: Atlassian Identity -->
-    <div class="panel">
-      <h2>Atlassian Account <span class="connected-badge">Tier 1 Connected</span></h2>
-      <div id="identity-loading" class="loading">Loading your Atlassian identity...</div>
-      <div id="identity-content" style="display:none">
-        <div class="identity-row">
-          <div class="identity-label">Name</div>
-          <div class="identity-value" id="identity-name"></div>
-        </div>
-        <div class="identity-row">
-          <div class="identity-label">Email</div>
-          <div class="identity-value" id="identity-email"></div>
-        </div>
-        <div class="identity-row" style="margin-top:16px">
-          <div class="identity-label">Accessible Sites</div>
-          <ul class="sites-list" id="identity-sites"></ul>
-        </div>
-      </div>
-      <div id="identity-error" class="error-msg">
-        Could not load Atlassian identity. Your OAuth session may have expired.
-        <br><a href="/auth/atlassian" style="color:#de350b">Sign in again</a>
-      </div>
-    </div>
-
-    <!-- Panel 2: Rovo Dev opt-in -->
-    <div class="panel">
-      <h2>Connect Rovo Dev <span class="optional-badge">Optional</span></h2>
-      <p class="instruction">
-        To use AI-powered Atlassian features (Jira/Confluence context in chat), create a Rovo Dev API token.
-        <a href="https://go.atlassian.com/rovo-dev-api-token" target="_blank" rel="noopener noreferrer">Get a Rovo Dev API token</a>.
-      </p>
-      <form id="rovo-form" onsubmit="connectRovo(event)">
-        <div class="form-group">
-          <label for="atat-token">Rovo Dev API Token (ATAT)</label>
-          <input
-            type="password"
-            id="atat-token"
-            name="atatToken"
-            placeholder="Paste your ATAT token here"
-            autocomplete="off"
-            aria-label="Rovo Dev API token"
-            required
-          >
-        </div>
-        <div id="rovo-error" class="error-msg" role="alert"></div>
-        <button type="submit" id="connect-btn" class="btn-primary">Connect Rovo Dev</button>
-        <a href="/dashboard" class="skip-link" aria-label="Skip Rovo Dev connection and go to dashboard">Skip for now</a>
-      </form>
-    </div>
-  </div>
-
-  <script>
-    // Load Atlassian identity on page load.
-    async function loadIdentity() {
-      const loadingEl = document.getElementById('identity-loading');
-      const contentEl = document.getElementById('identity-content');
-      const errorEl = document.getElementById('identity-error');
-      try {
-        const res = await fetch('/auth/atlassian/atlassian-identity');
-        if (!res.ok) {
-          throw new Error('HTTP ' + res.status);
-        }
-        const data = await res.json();
-        document.getElementById('identity-name').textContent = data.displayName || '(unknown)';
-        document.getElementById('identity-email').textContent = data.email || '(unknown)';
-        const sitesList = document.getElementById('identity-sites');
-        if (Array.isArray(data.accessibleResources) && data.accessibleResources.length > 0) {
-          data.accessibleResources.forEach(function(site) {
-            const li = document.createElement('li');
-            li.textContent = site.name + (site.url ? ' — ' + site.url : '');
-            sitesList.appendChild(li);
-          });
-        } else {
-          const li = document.createElement('li');
-          li.textContent = '(no accessible sites found)';
-          sitesList.appendChild(li);
-        }
-        loadingEl.style.display = 'none';
-        contentEl.style.display = '';
-      } catch (err) {
-        loadingEl.style.display = 'none';
-        errorEl.style.display = '';
-      }
-    }
-
-    // Submit ATAT token to POST /auth/atlassian/rovo-token.
-    async function connectRovo(event) {
-      event.preventDefault();
-      const btn = document.getElementById('connect-btn');
-      const errorEl = document.getElementById('rovo-error');
-      const tokenInput = document.getElementById('atat-token');
-
-      btn.disabled = true;
-      btn.textContent = 'Connecting...';
-      errorEl.style.display = 'none';
-
-      try {
-        const res = await fetch('/auth/atlassian/rovo-token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ atatToken: tokenInput.value }),
-        });
-        const data = await res.json();
-        if (res.ok && data.connected) {
-          window.location.href = '/dashboard';
-          return;
-        }
-        // Show error.
-        let msg = 'Failed to connect Rovo Dev.';
-        if (data.error === 'acli_not_found') {
-          msg = 'The Atlassian CLI (acli) was not found on this server. Please ask your admin to install it.';
-        } else if (data.error === 'login_failed') {
-          msg = 'Login failed. Please check your ATAT token and try again.' + (data.detail ? ' Detail: ' + data.detail : '');
-        } else if (data.error === 'timeout') {
-          msg = 'Connection timed out. Please try again.';
-        } else if (data.error === 'missing_token') {
-          msg = 'Please enter your ATAT token.';
-        }
-        errorEl.textContent = msg;
-        errorEl.style.display = '';
-      } catch (err) {
-        errorEl.textContent = 'Network error. Please check your connection and try again.';
-        errorEl.style.display = '';
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Connect Rovo Dev';
-      }
-    }
-
-    loadIdentity();
-  </script>
-</body>
-</html>`);
+    // /connect-rovo is no longer the post-login destination. Redirect to /integrations.
+    res.redirect("/integrations");
   });
 
   // -------------------------------------------------------------------------
