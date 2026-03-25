@@ -203,6 +203,29 @@ export function renderIntegrationsPage(): string {
 
         html { scroll-behavior: smooth; }
         h1, h2 { text-wrap: balance; }
+
+        /* Collapsible token update form — max-height transition for smooth reveal */
+        .rovo-update-form {
+            overflow: hidden;
+            max-height: 0;
+            transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                        opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            opacity: 0;
+        }
+        .rovo-update-form.expanded {
+            max-height: 220px;
+            opacity: 1;
+        }
+
+        /* Token update success message fade-out */
+        @keyframes token-success-fade {
+            0%   { opacity: 1; }
+            70%  { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        .token-success-fade {
+            animation: token-success-fade 3s ease-out forwards;
+        }
     </style>
 </head>
 <body class="bg-surface text-on-surface font-body min-h-screen grain-overlay">
@@ -331,6 +354,42 @@ export function renderIntegrationsPage(): string {
   <div>
     <p class="text-sm font-bold text-on-surface">Rovo Dev connected</p>
     <p class="text-xs text-on-surface-variant"><span id="rovo-email"></span></p>
+  </div>
+</div>
+<!-- Management actions row — secondary controls, right-aligned, not prominent -->
+<div class="flex items-center justify-end gap-6 -mt-2">
+  <!-- "Token updated" success confirmation — hidden until after a successful update -->
+  <span id="rovo-token-success" class="hidden flex items-center gap-1.5 text-sm font-semibold text-primary">
+    <span class="material-symbols-outlined text-sm" style="font-size:1rem">check_circle</span>
+    Token updated
+  </span>
+  <!-- Update API Token toggle — subtle text link with expand icon -->
+  <button id="rovo-toggle-token-btn" type="button" class="inline-flex items-center gap-1 text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors duration-200 link-reveal" aria-expanded="false" aria-controls="rovo-update-token-form">
+    Update API Token
+    <span class="material-symbols-outlined" style="font-size:1.1rem;vertical-align:middle">expand_more</span>
+  </button>
+  <!-- Disconnect link — findable but not alarming -->
+  <button id="rovo-disconnect-btn" type="button" class="text-sm font-semibold text-on-surface-variant hover:text-primary transition-colors duration-200 link-reveal" aria-label="Disconnect Rovo Dev">
+    Disconnect
+  </button>
+</div>
+<!-- Collapsible token update form — hidden by default, expands on toggle -->
+<div id="rovo-update-token-form" class="rovo-update-form" role="region" aria-label="Update API Token">
+  <div class="pt-1 space-y-3">
+    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider" for="atat-update-input">New ATAT Token</label>
+    <div class="relative group">
+      <input id="atat-update-input" class="w-full bg-surface-variant border-0 rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-primary transition-all font-mono text-sm" placeholder="Paste replacement ATAT token" type="password" aria-label="New Rovo Dev ATAT token"/>
+      <button id="atat-update-toggle-visibility" type="button" class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors duration-200" aria-label="Toggle token visibility">
+        <span class="material-symbols-outlined">visibility</span>
+      </button>
+    </div>
+    <!-- atat-update-error: hidden by default, shown on failure -->
+    <p id="atat-update-error" class="hidden text-sm text-error"></p>
+    <div class="flex justify-end pt-1">
+      <button id="atat-update-submit" type="button" class="px-6 py-2.5 primary-gradient text-white text-sm font-bold rounded-full cta-glow shadow-[0_4px_16px_-4px_rgba(0,61,155,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
+        Update Token
+      </button>
+    </div>
   </div>
 </div>
 <!-- Capabilities — Coming Soon cards (plan.md P2-8) -->
@@ -630,6 +689,125 @@ async function submitAtatToken() {
   }
 }
 
+// ─── Token update form: toggle, submit, disconnect ───────────────────────────
+
+var tokenFormVisible = false;
+
+function toggleTokenForm() {
+  var form      = document.getElementById('rovo-update-token-form');
+  var toggleBtn = document.getElementById('rovo-toggle-token-btn');
+  var icon      = toggleBtn ? toggleBtn.querySelector('.material-symbols-outlined') : null;
+  tokenFormVisible = !tokenFormVisible;
+  if (tokenFormVisible) {
+    form.classList.add('expanded');
+    if (icon) icon.textContent = 'expand_less';
+    toggleBtn.setAttribute('aria-expanded', 'true');
+    // Focus the input after the transition settles
+    setTimeout(function() {
+      var inp = document.getElementById('atat-update-input');
+      if (inp) inp.focus();
+    }, 360);
+  } else {
+    form.classList.remove('expanded');
+    if (icon) icon.textContent = 'expand_more';
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    // Clear the field when collapsing so stale tokens do not linger
+    var inp = document.getElementById('atat-update-input');
+    if (inp) inp.value = '';
+    var errEl = document.getElementById('atat-update-error');
+    if (errEl) errEl.classList.add('hidden');
+  }
+}
+
+var updateInFlight = false;
+
+async function submitUpdateToken() {
+  if (updateInFlight) return;
+
+  var inputEl   = document.getElementById('atat-update-input');
+  var submitBtn = document.getElementById('atat-update-submit');
+  var errorEl   = document.getElementById('atat-update-error');
+  var token     = inputEl.value.trim();
+
+  if (!token) {
+    errorEl.textContent = 'Please enter your new ATAT token.';
+    errorEl.classList.remove('hidden');
+    inputEl.focus();
+    return;
+  }
+
+  updateInFlight        = true;
+  submitBtn.disabled    = true;
+  submitBtn.textContent = 'Updating\u2026';
+  errorEl.classList.add('hidden');
+
+  try {
+    var res = await fetch('/auth/atlassian/rovo-token', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ atatToken: token })
+    });
+
+    if (res.ok) {
+      var data = await res.json().catch(function() { return {}; });
+      if (data.connected) {
+        // Update the email display if returned
+        if (data.email) {
+          document.getElementById('rovo-email').textContent = data.email;
+        }
+        // Collapse the form
+        tokenFormVisible = true; // force to true so toggle flips it to false
+        toggleTokenForm();
+        // Show the success message and fade it out after 3 s
+        var successEl = document.getElementById('rovo-token-success');
+        if (successEl) {
+          successEl.classList.remove('hidden');
+          successEl.classList.remove('token-success-fade');
+          // Force reflow so the animation restarts cleanly
+          void successEl.offsetWidth;
+          successEl.classList.add('token-success-fade');
+          setTimeout(function() { successEl.classList.add('hidden'); }, 3100);
+        }
+      } else {
+        errorEl.textContent = 'Token was not accepted \u2014 check and try again.';
+        errorEl.classList.remove('hidden');
+      }
+    } else {
+      var errData = await res.json().catch(function() { return {}; });
+      var code    = errData.error || errData.detail || '';
+      errorEl.textContent = ERROR_MESSAGES[code] || errData.detail || errData.error || 'Token rejected \u2014 check your ATAT token.';
+      errorEl.classList.remove('hidden');
+    }
+  } catch (err) {
+    console.error('[atat-update]', err);
+    errorEl.textContent = 'Connection failed \u2014 please try again.';
+    errorEl.classList.remove('hidden');
+  } finally {
+    updateInFlight        = false;
+    submitBtn.disabled    = false;
+    submitBtn.textContent = 'Update Token';
+  }
+}
+
+function disconnectRovo() {
+  // Collapse the token update form first if open
+  if (tokenFormVisible) {
+    tokenFormVisible = true;
+    toggleTokenForm();
+  }
+  // Flip states
+  document.getElementById('rovo-connected-state').classList.add('hidden');
+  var disconnectedEl = document.getElementById('rovo-disconnected-state');
+  disconnectedEl.classList.remove('hidden');
+  // Reset the badge to disconnected styling
+  var badgeEl = document.getElementById('rovo-status-badge');
+  badgeEl.textContent = 'Disconnected';
+  badgeEl.className   = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-surface-container text-on-surface-variant';
+  // Focus the main token input so the user can re-connect immediately
+  var inp = document.getElementById('atat-input');
+  if (inp) { inp.value = ''; inp.focus(); }
+}
+
 // ─── T019: DOMContentLoaded — parallel fetch + event wiring ──────────────────
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -663,6 +841,43 @@ document.addEventListener('DOMContentLoaded', function() {
       var icon = visToggle.querySelector('.material-symbols-outlined');
       if (icon) icon.textContent = isPassword ? 'visibility_off' : 'visibility';
     });
+  }
+
+  // Wire "Update API Token" toggle
+  var toggleTokenBtn = document.getElementById('rovo-toggle-token-btn');
+  if (toggleTokenBtn) {
+    toggleTokenBtn.addEventListener('click', toggleTokenForm);
+  }
+
+  // Wire update token submit button
+  var updateSubmitBtn = document.getElementById('atat-update-submit');
+  if (updateSubmitBtn) {
+    updateSubmitBtn.addEventListener('click', submitUpdateToken);
+  }
+
+  // Wire Enter key in update token input
+  var updateInput = document.getElementById('atat-update-input');
+  if (updateInput) {
+    updateInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') submitUpdateToken();
+    });
+  }
+
+  // Wire visibility toggle for update token input
+  var updateVisToggle = document.getElementById('atat-update-toggle-visibility');
+  if (updateVisToggle && updateInput) {
+    updateVisToggle.addEventListener('click', function() {
+      var isPassword = updateInput.type === 'password';
+      updateInput.type = isPassword ? 'text' : 'password';
+      var icon = updateVisToggle.querySelector('.material-symbols-outlined');
+      if (icon) icon.textContent = isPassword ? 'visibility_off' : 'visibility';
+    });
+  }
+
+  // Wire "Disconnect" button
+  var disconnectBtn = document.getElementById('rovo-disconnect-btn');
+  if (disconnectBtn) {
+    disconnectBtn.addEventListener('click', disconnectRovo);
   }
 
 });
