@@ -376,9 +376,13 @@ export function renderIntegrationsPage(): string {
 <!-- Collapsible token update form — hidden by default, expands on toggle -->
 <div id="rovo-update-token-form" class="rovo-update-form" role="region" aria-label="Update API Token">
   <div class="pt-1 space-y-3">
-    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider" for="atat-update-input">New ATAT Token</label>
+    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider" for="atat-update-input">New API Token</label>
+    <p class="text-xs text-on-surface-variant">
+      Need a new token? Create one in your
+      <a href="https://go.atlassian.com/rovo-dev-api-token" target="_blank" rel="noopener noreferrer" class="font-semibold link-reveal inline-flex items-center gap-0.5" aria-label="Open Atlassian API token page (opens in new tab)">Atlassian account<span class="material-symbols-outlined" style="font-size:0.85rem;vertical-align:middle">open_in_new</span></a>.
+    </p>
     <div class="relative group">
-      <input id="atat-update-input" class="w-full bg-surface-variant border-0 rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-primary transition-all font-mono text-sm" placeholder="Paste replacement ATAT token" type="password" aria-label="New Rovo Dev ATAT token"/>
+      <input id="atat-update-input" class="w-full bg-surface-variant border-0 rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-primary transition-all font-mono text-sm" placeholder="Paste your new API token" type="password" aria-label="New Rovo Dev API token"/>
       <button id="atat-update-toggle-visibility" type="button" class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors duration-200" aria-label="Toggle token visibility">
         <span class="material-symbols-outlined">visibility</span>
       </button>
@@ -419,14 +423,35 @@ export function renderIntegrationsPage(): string {
 <div id="rovo-disconnected-state" class="hidden space-y-8">
 <!-- API Token Field -->
 <div>
-<label class="block text-sm font-bold text-on-surface mb-3 uppercase tracking-wider" for="atat-input">Rovo Dev API Token (ATAT)</label>
+<!-- Instructional panel — guides new users through getting their token -->
+<div class="bg-surface-container-low rounded-xl p-4 mb-4 space-y-3">
+  <p class="text-sm font-semibold text-on-surface">Connect Rovo Dev in 3 steps</p>
+  <ol class="space-y-2 text-sm text-on-surface-variant list-none">
+    <li class="flex items-start gap-2.5">
+      <span class="flex-shrink-0 w-5 h-5 rounded-full bg-primary-fixed text-primary text-xs font-bold flex items-center justify-center mt-0.5">1</span>
+      <span>Go to your <span class="font-semibold text-on-surface">Atlassian account settings</span></span>
+    </li>
+    <li class="flex items-start gap-2.5">
+      <span class="flex-shrink-0 w-5 h-5 rounded-full bg-primary-fixed text-primary text-xs font-bold flex items-center justify-center mt-0.5">2</span>
+      <span>Open <span class="font-semibold text-on-surface">Security &rarr; API tokens</span> and create a Rovo Dev token</span>
+    </li>
+    <li class="flex items-start gap-2.5">
+      <span class="flex-shrink-0 w-5 h-5 rounded-full bg-primary-fixed text-primary text-xs font-bold flex items-center justify-center mt-0.5">3</span>
+      <span>Copy the token and paste it into the field below</span>
+    </li>
+  </ol>
+  <a href="https://go.atlassian.com/rovo-dev-api-token" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-sm font-semibold link-reveal" aria-label="Go to Atlassian API token page (opens in new tab)">
+    Open Atlassian API tokens
+    <span class="material-symbols-outlined" style="font-size:0.9rem;vertical-align:middle">open_in_new</span>
+  </a>
+</div>
+<label class="block text-sm font-bold text-on-surface mb-3 uppercase tracking-wider" for="atat-input">API Token</label>
 <div class="relative group">
-<input id="atat-input" class="w-full bg-surface-variant border-0 rounded-xl px-4 py-4 focus:ring-2 focus:ring-primary transition-all font-mono" placeholder="Enter your ATAT token" type="password" aria-label="Rovo Dev ATAT token"/>
+<input id="atat-input" class="w-full bg-surface-variant border-0 rounded-xl px-4 py-4 focus:ring-2 focus:ring-primary transition-all font-mono" placeholder="Paste your API token here" type="password" aria-label="Rovo Dev API token"/>
 <button id="atat-toggle-visibility" type="button" class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors duration-200" aria-label="Toggle token visibility">
 <span class="material-symbols-outlined">visibility</span>
 </button>
 </div>
-<p class="mt-2 text-xs text-on-surface-variant">Create an ATAT token at go.atlassian.com/rovo-dev-api-token.</p>
 <!-- atat-error: hidden by default, shown on token submission failure -->
 <p id="atat-error" class="hidden mt-2 text-sm text-error"></p>
 </div>
@@ -621,15 +646,15 @@ async function fetchRovoStatus() {
   }
 }
 
-// ─── T018: ATAT token submission ─────────────────────────────────────────────
+// ─── T018: API token submission ──────────────────────────────────────────────
 
 var atatInFlight = false;
 
 var ERROR_MESSAGES = {
-  login_failed:   'Login failed — check your ATAT token and try again.',
+  login_failed:   'Login failed — check your API token and try again.',
   acli_not_found: 'acli is not installed on this server. Contact your administrator.',
   timeout:        'Connection timed out — please try again.',
-  missing_token:  'Please enter your ATAT token.'
+  missing_token:  'Please enter your API token.'
 };
 
 async function submitAtatToken() {
@@ -641,7 +666,7 @@ async function submitAtatToken() {
   var token      = inputEl.value.trim();
 
   if (!token) {
-    errorEl.textContent = 'Please enter your ATAT token.';
+    errorEl.textContent = 'Please enter your API token.';
     errorEl.classList.remove('hidden');
     inputEl.focus();
     return;
@@ -675,7 +700,7 @@ async function submitAtatToken() {
     } else {
       var errData = await res.json().catch(function() { return {}; });
       var code    = errData.error || errData.detail || '';
-      errorEl.textContent = ERROR_MESSAGES[code] || errData.detail || errData.error || 'Token rejected — check your ATAT token.';
+      errorEl.textContent = ERROR_MESSAGES[code] || errData.detail || errData.error || 'Token rejected — check your API token and try again.';
       errorEl.classList.remove('hidden');
     }
   } catch (err) {
@@ -730,7 +755,7 @@ async function submitUpdateToken() {
   var token     = inputEl.value.trim();
 
   if (!token) {
-    errorEl.textContent = 'Please enter your new ATAT token.';
+    errorEl.textContent = 'Please enter your new API token.';
     errorEl.classList.remove('hidden');
     inputEl.focus();
     return;
@@ -775,7 +800,7 @@ async function submitUpdateToken() {
     } else {
       var errData = await res.json().catch(function() { return {}; });
       var code    = errData.error || errData.detail || '';
-      errorEl.textContent = ERROR_MESSAGES[code] || errData.detail || errData.error || 'Token rejected \u2014 check your ATAT token.';
+      errorEl.textContent = ERROR_MESSAGES[code] || errData.detail || errData.error || 'Token rejected \u2014 check your API token and try again.';
       errorEl.classList.remove('hidden');
     }
   } catch (err) {
@@ -818,7 +843,7 @@ document.addEventListener('DOMContentLoaded', function() {
     fetchRovoStatus().catch(function(err) { console.error('[rovo-init]', err); })
   ]);
 
-  // Wire ATAT token submit button
+  // Wire API token submit button
   var submitBtn = document.getElementById('atat-submit');
   if (submitBtn) {
     submitBtn.addEventListener('click', submitAtatToken);
