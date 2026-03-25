@@ -264,11 +264,11 @@ export function renderIntegrationsPage(): string {
 <header class="mb-12 flex flex-col md:flex-row items-center gap-8 bg-surface-container-low rounded-2xl p-8 relative overflow-hidden ambient-glow">
 <div class="z-10 flex-1">
 <div class="flex items-center gap-3 mb-4">
-<!-- TASTE DECISION 5 (above): CONNECTION VERIFIED badge is the sole red element. Intentional. -->
-<span class="stagger-entry animate-fade-up bg-tertiary-container text-on-tertiary-container px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Connection Verified</span>
+<!-- TASTE DECISION 5 (revised): CONNECTION VERIFIED badge uses primary-fixed (blue tint) — success/positive signal. Red (tertiary-container) was incorrect; red reads as error/danger. -->
+<span class="stagger-entry animate-fade-up bg-primary-fixed text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Connection Verified</span>
 </div>
 <h1 class="stagger-entry animate-fade-up-delay-1 text-4xl md:text-5xl font-headline font-extrabold text-primary tracking-tighter mb-4">You're connected.</h1>
-<p class="stagger-entry animate-fade-up-delay-2 text-on-surface-variant text-lg max-w-2xl leading-relaxed">Your Atlassian ecosystem is now connected to Blue Lobster. Configure Rovo Dev to unlock AI-powered Jira and Confluence context in chat.</p>
+<p class="stagger-entry animate-fade-up-delay-2 text-on-surface-variant text-lg max-w-2xl leading-relaxed">Manage your Atlassian connection, Rovo Dev integration, and AI capabilities.</p>
 </div>
 <!-- TASTE DECISION 4: Small mascot accent at 200px — brand presence without stealing focus from config -->
 <div class="z-10 stagger-entry animate-fade-up-delay-2">
@@ -422,16 +422,6 @@ export function renderIntegrationsPage(): string {
     <span class="block text-sm text-on-surface-variant">AI-powered reviews on pull requests in Bitbucket — catching issues before your team does.</span>
   </div>
 </div>
-<!-- Coming Soon: Proactive Jira Summaries -->
-<div class="flex items-start gap-4 opacity-60 pointer-events-none cursor-not-allowed" aria-disabled="true">
-  <div class="flex-1">
-    <div class="flex items-center gap-2 mb-0.5">
-      <span class="block font-bold text-on-surface">Proactive Jira Summaries</span>
-      <span class="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary-fixed px-2 py-0.5 rounded-full">Soon</span>
-    </div>
-    <span class="block text-sm text-on-surface-variant">Daily sprint progress summaries delivered to your chat — powered by real Jira data.</span>
-  </div>
-</div>
 </div>
 </div>
 <!-- rovo-disconnected-state: hidden by default, shown when disconnected -->
@@ -494,16 +484,6 @@ export function renderIntegrationsPage(): string {
       <span class="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary-fixed px-2 py-0.5 rounded-full">Soon</span>
     </div>
     <span class="block text-sm text-on-surface-variant">AI-powered reviews on pull requests in Bitbucket — catching issues before your team does.</span>
-  </div>
-</div>
-<!-- Coming Soon: Proactive Jira Summaries -->
-<div class="flex items-start gap-4 opacity-60 pointer-events-none cursor-not-allowed" aria-disabled="true">
-  <div class="flex-1">
-    <div class="flex items-center gap-2 mb-0.5">
-      <span class="block font-bold text-on-surface">Proactive Jira Summaries</span>
-      <span class="text-[9px] font-bold uppercase tracking-widest text-primary bg-primary-fixed px-2 py-0.5 rounded-full">Soon</span>
-    </div>
-    <span class="block text-sm text-on-surface-variant">Daily sprint progress summaries delivered to your chat — powered by real Jira data.</span>
   </div>
 </div>
 </div>
