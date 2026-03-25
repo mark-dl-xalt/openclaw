@@ -471,8 +471,15 @@ async function fetchIdentity() {
     document.getElementById('identity-avatar-initials').textContent     = initials;
     document.getElementById('identity-avatar-card-initials').textContent = initials;
 
-    // Render accessible sites
-    const resources = Array.isArray(data.accessibleResources) ? data.accessibleResources : [];
+    // Render accessible sites (deduplicate by id — API can return duplicates)
+    var rawResources = Array.isArray(data.accessibleResources) ? data.accessibleResources : [];
+    var seen = {};
+    var resources = rawResources.filter(function(site) {
+      var key = site.id || site.name || site.url;
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
     if (resources.length > 0) {
       sitesListEl.innerHTML = resources.map(function(site) {
         const label = escapeHtml(site.name || site.url || 'Unknown site');
