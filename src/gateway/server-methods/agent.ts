@@ -1008,6 +1008,7 @@ export const agentHandlers: GatewayRequestHandlers = {
           }),
           senderIsOwner,
           allowModelOverride,
+          tokenStore: context.tokenStore ?? undefined,
         },
         runId,
         idempotencyKey: idem,

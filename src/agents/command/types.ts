@@ -91,6 +91,8 @@ export type AgentCommandOpts = {
   workspaceDir?: SpawnedRunMetadata["workspaceDir"];
   /** Force bundled MCP teardown when a one-shot local run completes. */
   cleanupBundleMcpOnRunEnd?: boolean;
+  /** OAuth token store for Rovo Dev credential resolution. */
+  tokenStore?: import("../../auth/token-store.js").TokenStore;
 };
 
 export type AgentCommandIngressOpts = Omit<

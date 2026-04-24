@@ -29,6 +29,7 @@ import { sanitizeUserFacingText } from "../../agents/pi-embedded-helpers/sanitiz
 import { isLikelyExecutionAckPrompt } from "../../agents/pi-embedded-runner/run/incomplete-turn.js";
 import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
 import { buildAgentRuntimeOutcomePlan } from "../../agents/runtime-plan/build.js";
+import { createTokenStore } from "../../auth/token-store.js";
 import {
   resolveGroupSessionKey,
   resolveSessionTranscriptPath,
@@ -956,6 +957,10 @@ export async function runAgentTurnWithFallback(params: {
             return (async () => {
               let lifecycleTerminalEmitted = false;
               try {
+                // Create tokenStore for OAuth credential injection (rovo-dev).
+                const tokenStore = process.env.ATLASSIAN_OAUTH_CLIENT_ID
+                  ? await createTokenStore()
+                  : undefined;
                 const result = await runCliAgent({
                   sessionId: params.followupRun.run.sessionId,
                   sessionKey: params.sessionKey,
@@ -990,6 +995,7 @@ export async function runAgentTurnWithFallback(params: {
                   senderIsOwner: params.followupRun.run.senderIsOwner,
                   abortSignal: params.replyOperation?.abortSignal ?? params.opts?.abortSignal,
                   replyOperation: params.replyOperation,
+                  tokenStore,
                 });
                 bootstrapPromptWarningSignaturesSeen = resolveBootstrapWarningSignaturesSeen(
                   result.meta?.systemPromptReport,

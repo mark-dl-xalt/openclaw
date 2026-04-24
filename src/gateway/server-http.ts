@@ -878,6 +878,8 @@ export function createGatewayHttpServer(opts: {
   openAiChatCompletionsConfig?: import("../config/types.gateway.js").GatewayHttpChatCompletionsConfig;
   openResponsesEnabled: boolean;
   openResponsesConfig?: import("../config/types.gateway.js").GatewayHttpResponsesConfig;
+  /** Optional OAuth stage handler for Atlassian login flow. */
+  handleOAuthRequest?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
   strictTransportSecurityHeader?: string;
   handleHooksRequest: HooksRequestHandler;
   handlePluginRequest?: PluginHttpRequestHandler;
@@ -900,6 +902,7 @@ export function createGatewayHttpServer(opts: {
     openResponsesEnabled,
     openResponsesConfig,
     strictTransportSecurityHeader,
+    handleOAuthRequest,
     handleHooksRequest,
     handlePluginRequest,
     shouldEnforcePluginGatewayAuth,
@@ -950,6 +953,12 @@ export function createGatewayHttpServer(opts: {
           run: () => handleHooksRequest(req, res),
         },
       ];
+      if (handleOAuthRequest) {
+        requestStages.push({
+          name: "oauth-atlassian",
+          run: () => handleOAuthRequest(req, res),
+        });
+      }
       if (openAiCompatEnabled && isOpenAiModelsPath(requestPath)) {
         requestStages.push({
           name: "models",

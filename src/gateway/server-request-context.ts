@@ -57,6 +57,7 @@ export type GatewayRequestContextParams = {
   wizardRunner: GatewayRequestContext["wizardRunner"];
   broadcastVoiceWakeChanged: GatewayRequestContext["broadcastVoiceWakeChanged"];
   unavailableGatewayMethods: ReadonlySet<string>;
+  tokenStore?: GatewayRequestContext["tokenStore"];
 };
 
 export function createGatewayRequestContext(
@@ -64,6 +65,7 @@ export function createGatewayRequestContext(
 ): GatewayRequestContext {
   return {
     deps: params.deps,
+    tokenStore: params.tokenStore,
     // Keep cron reads live so config hot reload can swap cron/store state without rebuilding
     // every handler closure that already holds this request context.
     get cron() {

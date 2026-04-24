@@ -38,6 +38,7 @@ export type RespondFn = (
 
 export type GatewayRequestContext = {
   deps: CliDeps;
+  tokenStore?: import("../../auth/token-store.js").TokenStore | null;
   cron: CronServiceContract;
   cronStorePath: string;
   execApprovalManager?: ExecApprovalManager;

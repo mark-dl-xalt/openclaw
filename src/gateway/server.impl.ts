@@ -480,6 +480,11 @@ export async function startGatewayServer(
     startedAt: serverStartedAt,
     getStartupPending: () => !startupSidecarsReady,
   });
+  // Create Atlassian OAuth stage handler (login page, auth routes, token store)
+  const { createOAuthStageHandler } = await import("./oauth-stage.js");
+  const oauthStage = await createOAuthStageHandler();
+  const oauthTokenStore = oauthStage.tokenStore;
+
   log.info("starting HTTP server...");
   const {
     canvasHost,
@@ -533,6 +538,7 @@ export async function startGatewayServer(
       logHooks,
       logPlugins,
       getReadiness,
+      handleOAuthRequest: oauthStage.handleRequest,
     }),
   );
   const {
@@ -706,6 +712,7 @@ export async function startGatewayServer(
     );
     const gatewayRequestContext = createGatewayRequestContext({
       deps,
+      tokenStore: oauthTokenStore,
       runtimeState,
       execApprovalManager,
       pluginApprovalManager,

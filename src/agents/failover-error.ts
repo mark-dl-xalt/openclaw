@@ -64,6 +64,7 @@ export function resolveFailoverStatus(reason: FailoverReason): number | undefine
     case "overloaded":
       return 503;
     case "auth":
+    case "auth_required":
       return 401;
     case "auth_permanent":
       return 403;

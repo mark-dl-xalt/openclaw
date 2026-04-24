@@ -13,6 +13,7 @@ import type {
 import { normalizeOptionalLowercaseString } from "../shared/string-coerce.js";
 import { normalizeProviderId } from "./model-selection.js";
 import { mergePluginTextTransforms } from "./plugin-text-transforms.js";
+import { ROVODEV_BACKEND } from "./rovo-dev-backends.js";
 
 type CliBackendsDeps = {
   resolvePluginSetupCliBackend: typeof resolvePluginSetupCliBackend;
@@ -62,7 +63,12 @@ type FallbackCliBackendPolicy = {
   prepareExecution?: CliBackendPlugin["prepareExecution"];
 };
 
-const FALLBACK_CLI_BACKEND_POLICIES: Record<string, FallbackCliBackendPolicy> = {};
+const FALLBACK_CLI_BACKEND_POLICIES: Record<string, FallbackCliBackendPolicy> = {
+  "rovo-dev": {
+    bundleMcp: false,
+    baseConfig: ROVODEV_BACKEND,
+  },
+};
 
 function normalizeBundleMcpMode(
   mode: CliBundleMcpMode | undefined,

@@ -36,6 +36,8 @@ export type RunCliAgentParams = {
   bootstrapPromptWarningSignature?: string;
   images?: ImageContent[];
   imageOrder?: PromptImageOrderEntry[];
+  /** OAuth token store for Rovo Dev credential resolution (V2). */
+  tokenStore?: import("../../auth/token-store.js").TokenStore;
   skillsSnapshot?: SkillSnapshot;
   messageChannel?: string;
   messageProvider?: string;

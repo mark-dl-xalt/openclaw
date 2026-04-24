@@ -1,4 +1,4 @@
-import type { Server as HttpServer } from "node:http";
+import type { IncomingMessage, Server as HttpServer, ServerResponse } from "node:http";
 import { WebSocketServer } from "ws";
 import { CANVAS_HOST_PATH } from "../canvas-host/a2ui.js";
 import { type CanvasHostHandler, createCanvasHostHandler } from "../canvas-host/server.js";
@@ -78,6 +78,8 @@ export async function createGatewayRuntimeState(params: {
   logHooks: ReturnType<typeof createSubsystemLogger>;
   logPlugins: ReturnType<typeof createSubsystemLogger>;
   getReadiness?: ReadinessChecker;
+  /** Optional OAuth stage handler for Atlassian login flow. */
+  handleOAuthRequest?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 }): Promise<{
   canvasHost: CanvasHostHandler | null;
   releasePluginRouteRegistry: () => void;
@@ -191,6 +193,7 @@ export async function createGatewayRuntimeState(params: {
         openAiChatCompletionsConfig: params.openAiChatCompletionsConfig,
         openResponsesEnabled: params.openResponsesEnabled,
         openResponsesConfig: params.openResponsesConfig,
+        handleOAuthRequest: params.handleOAuthRequest,
         strictTransportSecurityHeader: params.strictTransportSecurityHeader,
         handleHooksRequest,
         handlePluginRequest,

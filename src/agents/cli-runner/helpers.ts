@@ -351,6 +351,33 @@ export async function prepareCliPromptImagePayload(params: {
   };
 }
 
+/**
+ * Strip ANSI escape codes and acli UI noise from Rovo Dev stdout.
+ *
+ * Only call this for the rovo-dev backend — never apply it to Claude or Codex output.
+ */
+export function stripRovoDevNoise(text: string): string {
+  const ESC = "\x1B";
+  const BEL = "\x07";
+  const ansiPattern = new RegExp(
+    `${ESC}\\[[0-9;]*[a-zA-Z]|${ESC}\\].*?${BEL}|\\[[?]?[0-9;]*[a-zA-Z]`,
+    "g",
+  );
+  const stripped = text.replace(ansiPattern, "");
+
+  const lines = stripped.split(/\r?\n/);
+  const cleaned = lines.filter((line) => {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("✔")) return false;
+    if (trimmed.startsWith("⬢ Called")) return false;
+    if (/^Session context:\s*[▮▯█░]+/.test(trimmed)) return false;
+    if (/^─+\s*Response\s*─+$/.test(trimmed) || /^─{4,}$/.test(trimmed)) return false;
+    return true;
+  });
+
+  return cleaned.join("\n").trim();
+}
+
 export function buildCliArgs(params: {
   backend: CliBackendConfig;
   baseArgs: string[];

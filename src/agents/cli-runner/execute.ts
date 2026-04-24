@@ -16,6 +16,8 @@ import {
 import { FailoverError, resolveFailoverStatus } from "../failover-error.js";
 import { classifyFailoverReason } from "../pi-embedded-helpers.js";
 import { applyPluginTextReplacements } from "../plugin-text-transforms.js";
+import { resolveRovoDevCredential, resolveRovoDevCredentialV2 } from "../rovo-dev-auth.js";
+import { ROVODEV_BACKEND_ID } from "../rovo-dev-backends.js";
 import { applySkillEnvOverridesFromSnapshot } from "../skills.js";
 import { runClaudeLiveSessionTurn, shouldUseClaudeLiveSession } from "./claude-live-session.js";
 import { prepareClaudeCliSkillsPlugin } from "./claude-skills-plugin.js";
@@ -29,6 +31,7 @@ import {
   resolvePromptInput,
   resolveSessionIdToSend,
   resolveSystemPromptUsage,
+  stripRovoDevNoise,
   writeCliSystemPromptFile,
 } from "./helpers.js";
 import {
@@ -275,11 +278,35 @@ export async function executePreparedCliRun(
         const logOutputText =
           isTruthyEnvValue(process.env[CLI_BACKEND_LOG_OUTPUT_ENV]) ||
           isTruthyEnvValue(process.env[LEGACY_CLAUDE_CLI_LOG_OUTPUT_ENV]);
-        const env = (() => {
+        const env = await (async () => {
           const next = sanitizeHostExecEnv({
             baseEnv: process.env,
             blockPathOverrides: true,
           });
+          // T106: Inject Rovo Dev credentials — OAuth V2 when tokenStore available, V1 fallback
+          if (context.backendResolved.id === ROVODEV_BACKEND_ID) {
+            if (params.tokenStore) {
+              const result = await resolveRovoDevCredentialV2({
+                tokenStore: params.tokenStore,
+                userId: "default",
+              });
+              if (result.reason === "AUTH_REQUIRED" || result.reason === "REFRESH_FAILED") {
+                throw new FailoverError(
+                  result.reason === "AUTH_REQUIRED"
+                    ? "Rovo Dev requires authentication. Please sign in at /login."
+                    : "Rovo Dev OAuth token refresh failed. Please sign in again at /login.",
+                  {
+                    reason: "auth_required",
+                    provider: params.provider,
+                    model: context.modelId,
+                    status: 401,
+                  },
+                );
+              }
+            } else {
+              resolveRovoDevCredential();
+            }
+          }
           const preservedEnv = parseCliBackendPreserveEnv(process.env[CLI_BACKEND_PRESERVE_ENV]);
           for (const key of backend.clearEnv ?? []) {
             if (preservedEnv.has(key)) {
@@ -452,7 +479,11 @@ export async function executePreparedCliRun(
           throw createCliAbortError();
         }
 
-        const stdout = result.stdout.trim();
+        const rawStdout = result.stdout.trim();
+        const stdout =
+          context.backendResolved.id === ROVODEV_BACKEND_ID
+            ? stripRovoDevNoise(rawStdout)
+            : rawStdout;
         const stderr = result.stderr.trim();
         if (logOutputText) {
           if (stdout) {

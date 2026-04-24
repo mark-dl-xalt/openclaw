@@ -8,6 +8,11 @@ import { normalizeProviderId } from "./model-selection.js";
 const KEY_SPLIT_RE = /[\s,;]+/g;
 const GOOGLE_LIVE_SINGLE_KEY = "OPENCLAW_LIVE_GEMINI_KEY";
 
+// T013: Rovo Dev service-account credential env vars
+export const ROVODEV_EMAIL_KEY = "OPENCLAW_LIVE_ROVODEV_EMAIL";
+export const ROVODEV_TOKEN_KEY = "OPENCLAW_LIVE_ROVODEV_TOKEN";
+export const ROVODEV_SITE_KEY = "OPENCLAW_LIVE_ROVODEV_SITE";
+
 const PROVIDER_PREFIX_OVERRIDES: Record<string, string> = {
   google: "GEMINI",
   "google-vertex": "GEMINI",

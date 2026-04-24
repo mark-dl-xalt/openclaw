@@ -1,3 +1,4 @@
+import { registerRovoDevStatusHook } from "../agents/rovo-dev-status-hook.js";
 import type { CliDeps } from "../cli/deps.types.js";
 import type { GatewayTailscaleMode } from "../config/types.gateway.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
@@ -238,6 +239,9 @@ export async function startGatewaySidecars(params: {
             `loaded ${loadedCount} internal hook handler${loadedCount > 1 ? "s" : ""}`,
           );
         }
+        // Register Rovo Dev status injection hook unconditionally — it injects
+        // acli connection status into the atlas agent's system prompt per turn.
+        registerRovoDevStatusHook();
       }
     } catch (err) {
       params.logHooks.error(`failed to load hooks: ${String(err)}`);
